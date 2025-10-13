@@ -1,6 +1,17 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { SentimentStory } from "@/types/sentiment";
 
+type SentimentStoryRow = {
+  external_id: string;
+  brand: string;
+  summary: string;
+  quote: string;
+  sentiment: "positive" | "neutral" | "negative";
+  keywords: string[] | null;
+  channel: string | null;
+  updated_at: string;
+};
+
 export async function fetchSentimentStories(): Promise<SentimentStory[]> {
   const supabase = getSupabaseClient();
 
@@ -16,9 +27,9 @@ export async function fetchSentimentStories(): Promise<SentimentStory[]> {
   }
 
   return (
-    data?.map((row) => ({
+    data?.map((row: SentimentStoryRow) => ({
       id: row.external_id,
-      brand: row.brand,
+      brand: row.brand as SentimentStory["brand"],
       summary: row.summary,
       quote: row.quote,
       sentiment: row.sentiment,

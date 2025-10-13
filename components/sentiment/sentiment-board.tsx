@@ -26,19 +26,17 @@ export function SentimentBoard() {
     let mounted = true;
 
     async function loadStories() {
+      setLoading(true);
       try {
-        setLoading(true);
         const data = await fetchSentimentStories();
         if (mounted) {
           setStories(data);
           setError(null);
         }
-      } catch (err) {
+      } catch {
         if (mounted) {
           setError("Unable to load sentiment stories right now.");
         }
-        // In a real app we might log this somewhere
-        console.error(err);
       } finally {
         if (mounted) {
           setLoading(false);
