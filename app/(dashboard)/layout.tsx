@@ -6,6 +6,7 @@ import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { EventWidget } from "@/components/widgets/event-widget";
+import { SyncButton } from "@/components/sync-button";
 import { cn } from "@/lib/utils";
 
 type DashboardLayoutProps = {
@@ -46,7 +47,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               Dashboard
             </Badge>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            <SyncButton />
             <EventWidget />
             <ThemeToggle />
             <div className="hidden md:flex flex-col text-right text-xs text-muted-foreground">
