@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MARKETING_BRANDS, type MarketingBrand } from "@/lib/data/marketing";
-import { sentimentStories } from "@/lib/data/sentiment";
+import { fetchSentimentStories } from "@/lib/supabase/sentiment";
+import type { SentimentStory } from "@/types/sentiment";
 import { cn } from "@/lib/utils";
 
 type FilterValue = "all" | MarketingBrand;
@@ -17,10 +18,45 @@ type FilterValue = "all" | MarketingBrand;
 export function SentimentBoard() {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState<FilterValue>("all");
+  const [stories, setStories] = React.useState<SentimentStory[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const stories = React.useMemo(() => {
+  React.useEffect(() => {
+    let mounted = true;
+
+    async function loadStories() {
+      try {
+        setLoading(true);
+        const data = await fetchSentimentStories();
+        if (mounted) {
+          setStories(data);
+          setError(null);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError("Unable to load sentiment stories right now.");
+        }
+        // In a real app we might log this somewhere
+        console.error(err);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadStories();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filteredStories = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return sentimentStories.filter((story) => {
+
+    return stories.filter((story) => {
       const matchesBrand = filter === "all" || story.brand === filter;
       const matchesQuery =
         !normalizedQuery ||
@@ -31,7 +67,7 @@ export function SentimentBoard() {
         );
       return matchesBrand && matchesQuery;
     });
-  }, [filter, query]);
+  }, [stories, filter, query]);
 
   return (
     <div className="space-y-8">
@@ -68,7 +104,18 @@ export function SentimentBoard() {
       </div>
 
       <section className="grid gap-4 md:grid-cols-2">
-        {stories.map((story) => (
+        {loading ? (
+          <p className="col-span-full rounded-lg border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+            Loading sentiment stories…
+          </p>
+        ) : null}
+        {error ? (
+          <p className="col-span-full rounded-lg border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">
+            {error}
+          </p>
+        ) : null}
+        {!loading && !error
+          ? filteredStories.map((story) => (
           <Card
             key={story.id}
             className="border border-transparent bg-gradient-to-br from-background to-muted/50 transition hover:border-primary/40"
@@ -111,7 +158,7 @@ export function SentimentBoard() {
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>
-                  <span className="font-medium text-foreground">Source:</span> {story.channel}
+                  <span className="font-medium text-foreground">Source:</span> {story.channel || "Unspecified"}
                 </span>
                 <span>
                   {new Date(story.updatedAt).toLocaleString("en-US", {
@@ -122,8 +169,9 @@ export function SentimentBoard() {
               </div>
             </CardContent>
           </Card>
-        ))}
-        {stories.length === 0 ? (
+        ))
+          : null}
+        {!loading && !error && filteredStories.length === 0 ? (
           <p className="col-span-full rounded-lg border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
             No stories match your filters yet. Try adjusting the brand or search term.
           </p>
