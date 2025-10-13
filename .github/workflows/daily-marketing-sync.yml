@@ -1,0 +1,23 @@
+name: Daily Marketing Sync
+
+on:
+  schedule:
+    - cron: "59 23 * * *" # Runs every day at 11:59 PM UTC
+  workflow_dispatch: # Allows manual trigger too
+
+jobs:
+  run-daily-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Supabase Edge Function for CPF Launchpad
+        env:
+          SUPABASE_URL: https://sqhqzrtmjspwqqhnjtss.supabase.co
+          SUPABASE_FUNCTION: fetch-cpf-launchpad-marketing-data
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "🚀 Running CPF Launchpad Marketing Sync..."
+          curl -X POST "$SUPABASE_URL/functions/v1/$SUPABASE_FUNCTION" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"trigger":"github_action"}'
+          echo "✅ Sync completed successfully."
