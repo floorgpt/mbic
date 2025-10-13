@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
+import { SyncButton } from "@/components/sync-button";
 import {
   Card,
   CardContent,
@@ -185,7 +186,7 @@ export function MarketingOverview() {
         title="Brand Campaign Health"
         description="Compare paid performance across CPF Floors, CPF Launchpad, and Talula Floors."
         actions={
-          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3">
             <Select
               value={brand}
               onValueChange={(value) => setBrand(value as MarketingBrand)}
@@ -216,6 +217,7 @@ export function MarketingOverview() {
                 ))}
               </SelectContent>
             </Select>
+            <SyncButton />
           </div>
         }
       />
