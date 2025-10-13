@@ -37,8 +37,7 @@ export function SidebarNav() {
       <nav className="mt-6 flex flex-col gap-1 border-t pt-6 pb-6 text-sm text-muted-foreground">
         {SECONDARY_NAV.map(({ icon: Icon, ...item }) => {
           const active =
-            pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(item.href));
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           const isLogout = item.href === "/logout";
 

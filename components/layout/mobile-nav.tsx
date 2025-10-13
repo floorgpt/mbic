@@ -58,8 +58,7 @@ export function MobileNav() {
           <div className="mt-2 border-t pt-2">
             {SECONDARY_NAV.map(({ icon: Icon, ...item }) => {
               const active =
-                pathname === item.href ||
-                (item.href !== "/" && pathname.startsWith(item.href));
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
 
               if (item.href === "/logout") {
                 return (

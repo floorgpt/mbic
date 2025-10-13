@@ -1,37 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## MBIC Dashboard (CPF Floors)
 
-## Getting Started
+Marketing & BI Center (MBIC) for CPF Floors built with Next.js 15, TypeScript, shadcn/ui, Tailwind CSS, Recharts, and Supabase.
 
-First, run the development server:
+## Requirements
+
+- Node.js 18+
+- npm 9+
+- Supabase project with `sales_demo`, `sales_reps_demo`, and `customers_demo` tables
+- Environment variables (see below)
+
+## Environment Variables
+
+Copy `.env.local.example` to `.env.local` and populate the values:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.local.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Variable | Description |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key for browser access |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key used server-side (profile page) |
+| `RETELL_AI_SECRET` | Secret token used to authorise Retell AI webhook calls |
+| `OPENAI_API_KEY` | OpenAI key for MBIC agent summaries |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> **Note:** `SUPABASE_SERVICE_ROLE_KEY`, `RETELL_AI_SECRET`, and `OPENAI_API_KEY` are server-only secrets and must never be prefixed with `NEXT_PUBLIC_`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+```bash
+npm run dev         # Start local dev server
+npm run lint        # Run ESLint with auto-fix
+npm run type-check  # Run TypeScript compiler with --noEmit
+npm run build       # Production build used by Netlify
+npm run start       # Run the compiled production build
+```
 
-To learn more about Next.js, take a look at the following resources:
+Before pushing, ensure both lint and type-check succeed so Netlify builds remain healthy:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+npm run type-check
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Development Notes
 
-## Deploy on Vercel
+- UI tokens are centralised via Tailwind CSS and shadcn/ui. Prefer updating custom tokens through `tailwind.config` or component-level classes instead of mutating third-party theme types.
+- Supabase queries live in `lib/supabase/queries.ts` and are shared by page components and API handlers.
+- `middleware.ts` protects the Retell AI webhook by enforcing `RETELL_AI_SECRET`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment (Netlify)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# mbic
+1. Connect the GitHub repository to Netlify.
+2. Set the environment variables listed above in Netlify → Site settings → Environment variables.
+3. Build command: `npm run build`
+4. Publish directory: `.next`
+
+Every push to `main` will trigger a Netlify deploy.

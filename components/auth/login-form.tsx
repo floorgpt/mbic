@@ -23,8 +23,8 @@ export function LoginForm() {
               brandAccent: "#1d4ed8",
             },
             radii: {
-              button: "12px",
-              input: "12px",
+              buttonBorderRadius: "12px",
+              inputBorderRadius: "12px",
             },
           },
         },
