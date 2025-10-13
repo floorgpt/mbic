@@ -28,20 +28,24 @@ import {
 
 const DEFAULT_REP = "Juan Pedro Boscan";
 
-type SalesPageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
-};
+type SearchParamsShape = Record<string, string | string[] | undefined>;
 
-export default async function SalesPage({ searchParams }: SalesPageProps) {
+export default async function SalesPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParamsShape>;
+}) {
+  const resolvedSearchParams: SearchParamsShape = (await searchParams) ?? {};
+
   const reps = await fetchSalesReps();
 
   if (!reps.length) {
     notFound();
   }
 
-  const rawRep = Array.isArray(searchParams?.rep)
-    ? searchParams?.rep[0]
-    : searchParams?.rep;
+  const rawRep = Array.isArray(resolvedSearchParams.rep)
+    ? resolvedSearchParams.rep[0]
+    : resolvedSearchParams.rep;
   const selectedRep =
     reps.find(
       (rep) =>
@@ -65,9 +69,9 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
   );
 
   const dealers = breakdown.map((dealer) => dealer.dealer_name);
-  const rawDealer = Array.isArray(searchParams?.dealer)
-    ? searchParams?.dealer[0]
-    : searchParams?.dealer;
+  const rawDealer = Array.isArray(resolvedSearchParams.dealer)
+    ? resolvedSearchParams.dealer[0]
+    : resolvedSearchParams.dealer;
   const selectedDealerName = rawDealer && dealers.includes(rawDealer)
     ? rawDealer
     : dealers[0];
