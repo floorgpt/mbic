@@ -1,5 +1,3 @@
-import { cache } from "react";
-
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { MonthlyTotal, SalesRow } from "@/types/sales";
 
@@ -139,8 +137,6 @@ export function calculateGrandTotal(rows: SalesRow[]): number {
   return Number(total.toFixed(2));
 }
 
-export const fetchSalesRangeCached = cache(fetchSalesRange);
-
 async function resolveReportingWindow(start?: string, end?: string): Promise<{
   start: string;
   end: string;
@@ -273,7 +269,7 @@ export function groupByDealerMonth(rows: SalesRow[], dealerId: number): MonthlyT
 }
 
 export async function fetchRepSalesData(repId: number): Promise<RepSalesData> {
-  const rows = await fetchSalesRangeCached({ repId });
+  const rows = await fetchSalesRange({ repId });
 
   const grandTotal = calculateGrandTotal(rows);
   const invoiceCount = rows.length;
@@ -416,7 +412,7 @@ export async function fetchOrganizationSalesOverview({
 } = {}): Promise<OrganizationSalesOverview> {
   const { start: yearStart, end: yearEnd } = await resolveReportingWindow(start, end);
 
-  const rows = await fetchSalesRangeCached({ start: yearStart, end: yearEnd });
+  const rows = await fetchSalesRange({ start: yearStart, end: yearEnd });
   const grandTotal = calculateGrandTotal(rows);
   const invoiceCount = rows.length;
   const monthlyTotals = groupByMonth(rows);
