@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { MonthlyTotal, SalesRow } from "@/types/sales";
 
 export type DealerAggregate = {
@@ -73,11 +73,12 @@ export async function fetchSalesRange({
   customerId,
   repId,
 }: FetchRangeArgs = {}): Promise<SalesRow[]> {
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseAdminClient();
   let query = supabase
     .from("sales_demo")
     .select(
       "invoice_date, invoice_amount, customer_id, rep_id, invoice_number, collection",
+      { count: "exact" },
     );
 
   if (start) {
@@ -93,7 +94,7 @@ export async function fetchSalesRange({
     query = query.eq("rep_id", repId);
   }
 
-  const { data, error } = await query;
+  const { data, error } = await query.limit(1000000);
   if (error) {
     throw error;
   }
