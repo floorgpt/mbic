@@ -141,6 +141,43 @@ export function calculateGrandTotal(rows: SalesRow[]): number {
 
 export const fetchSalesRangeCached = cache(fetchSalesRange);
 
+async function resolveReportingWindow(start?: string, end?: string): Promise<{
+  start: string;
+  end: string;
+}> {
+  if (start && end) {
+    return { start, end };
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("sales_demo")
+    .select("invoice_date")
+    .order("invoice_date", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = (data ?? []) as Array<{ invoice_date: string | null }>;
+  const latestDate =
+    rows.length > 0 && rows[0]?.invoice_date
+      ? new Date(rows[0].invoice_date)
+      : null;
+
+  const reference = start
+    ? new Date(start)
+    : latestDate ?? new Date();
+
+  const targetYear = reference.getUTCFullYear();
+
+  return {
+    start: start ?? `${targetYear}-01-01`,
+    end: end ?? `${targetYear + 1}-01-01`,
+  };
+}
+
 async function fetchCustomerNames(customerIds: number[]): Promise<Map<number, string>> {
   if (customerIds.length === 0) {
     return new Map();
@@ -377,9 +414,7 @@ export async function fetchOrganizationSalesOverview({
   start?: string;
   end?: string;
 } = {}): Promise<OrganizationSalesOverview> {
-  const now = new Date();
-  const yearStart = start ?? new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
-  const yearEnd = end ?? new Date(now.getFullYear() + 1, 0, 1).toISOString().slice(0, 10);
+  const { start: yearStart, end: yearEnd } = await resolveReportingWindow(start, end);
 
   const rows = await fetchSalesRangeCached({ start: yearStart, end: yearEnd });
   const grandTotal = calculateGrandTotal(rows);
