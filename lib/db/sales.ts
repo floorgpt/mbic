@@ -146,7 +146,7 @@ async function fetchCustomerNames(customerIds: number[]): Promise<Map<number, st
     return new Map();
   }
 
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("customers_demo")
     .select("customer_id, dealer_name")
@@ -286,7 +286,7 @@ function aggregateCollections(rows: SalesRow[], grandTotal: number): CollectionA
 
 async function fetchRepNames(repIds: number[]): Promise<Map<number, string>> {
   if (repIds.length === 0) return new Map();
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("sales_reps_demo")
     .select("rep_id, rep_name")
