@@ -25,6 +25,7 @@ import {
   fetchRepSalesTrend,
   fetchSalesReps,
 } from "@/lib/supabase/queries";
+import { validateSalesData } from "@/lib/db/sales-validation";
 
 const DEFAULT_REP = "Juan Pedro Boscan";
 
@@ -35,6 +36,7 @@ type SalesPageProps = {
 };
 
 export default async function SalesPage({ searchParams }: SalesPageProps) {
+  await validateSalesData();
   const resolvedSearchParams: SearchParamsShape = searchParams
     ? await searchParams
     : {};
