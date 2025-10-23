@@ -19,48 +19,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils/format";
-import {
-  fetchMonthlyAveragesPerDealer,
-  fetchRevenueSummary,
-  fetchRevenueTrend,
-  fetchTopCollections,
-  fetchTopDealers,
-  fetchTopRepsByRevenue,
-} from "@/lib/supabase/queries";
+import { fetchOrganizationSalesOverview } from "@/lib/db/sales";
 
 export const revalidate = 60;
 
 export default async function DashboardPage() {
-  const [
-    summary,
-    trend,
-    topDealers,
-    topCollections,
-    monthlyAverages,
-    topReps,
-  ] = await Promise.all([
-    fetchRevenueSummary(),
-    fetchRevenueTrend(),
-    fetchTopDealers(5),
-    fetchTopCollections(),
-    fetchMonthlyAveragesPerDealer(),
-    fetchTopRepsByRevenue(10),
-  ]);
+  const overview = await fetchOrganizationSalesOverview();
+  const summary = {
+    totalRevenue: overview.grandTotal,
+    growthRate: overview.growthRate,
+    activeDealers: overview.activeDealers,
+  };
 
-  const latestPerDealer = new Map<
-    string,
-    { month: string; avg: number }
-  >();
+  const trend = overview.monthlyTotals.map((item) => ({
+    month: item.month,
+    total_sales: item.total,
+  }));
 
-  for (const entry of monthlyAverages) {
-    const current = latestPerDealer.get(entry.dealer_name);
-    if (!current || entry.month > current.month) {
-      latestPerDealer.set(entry.dealer_name, {
-        month: entry.month,
-        avg: Number(entry.monthly_avg_invoice),
-      });
-    }
-  }
+  const topDealers = overview.dealerAggregates.slice(0, 5);
+  const topCollections = overview.collectionAggregates.slice(0, 5);
+  const topReps = overview.repAggregates.slice(0, 10);
 
   return (
     <div className="space-y-8">
@@ -154,14 +132,11 @@ export default async function DashboardPage() {
                 <div>
                   <p className="font-medium">{collection.collection}</p>
                   <p className="text-xs text-muted-foreground">
-                    {formatCurrency(collection.total_sales)} lifetime
+                    {formatCurrency(collection.revenue)} lifetime
                   </p>
                 </div>
                 <Badge variant="outline" className="border-primary/30 text-primary">
-                  {formatPercent(
-                    (collection.total_sales / summary.totalRevenue || 0) * 100,
-                  )}{" "}
-                  share
+                  {formatPercent(collection.revenue_share)} share
                 </Badge>
               </div>
             ))}
@@ -192,27 +167,26 @@ export default async function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {topDealers.map((dealer) => {
-                  const monthly = latestPerDealer.get(dealer.dealer_name);
-                  return (
-                    <TableRow key={dealer.dealer_name}>
-                      <TableCell className="font-medium">
-                        {dealer.dealer_name}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(dealer.total_sales)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {monthly ? formatCurrency(monthly.avg) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {formatPercent(
-                          (dealer.total_sales / summary.totalRevenue || 0) * 100,
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {topDealers.map((dealer) => (
+                  <TableRow key={dealer.customer_id}>
+                    <TableCell className="font-medium">
+                      {dealer.dealer_name}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(dealer.revenue)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {dealer.latest_month_avg
+                        ? formatCurrency(dealer.latest_month_avg)
+                        : dealer.average_invoice
+                          ? formatCurrency(dealer.average_invoice)
+                          : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {formatPercent(dealer.revenue_share)}
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </CardContent>
@@ -246,10 +220,10 @@ export default async function DashboardPage() {
                     <TableCell className="font-medium">#{index + 1}</TableCell>
                     <TableCell>{rep.rep_name}</TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(rep.total_sales)}
+                      {formatCurrency(rep.revenue)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {formatNumber(rep.invoice_count)}
+                      {formatNumber(rep.invoices)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {formatNumber(rep.customer_count)}

@@ -10,6 +10,8 @@ export type DealerAggregate = {
   invoices: number;
   average_invoice: number;
   revenue_share: number;
+  latest_month?: string;
+  latest_month_avg?: number;
 };
 
 export type RepSalesData = {
@@ -19,6 +21,34 @@ export type RepSalesData = {
   invoiceCount: number;
   uniqueCustomers: number;
   dealers: DealerAggregate[];
+};
+
+export type CollectionAggregate = {
+  collection: string;
+  revenue: number;
+  invoices: number;
+  revenue_share: number;
+};
+
+export type RepAggregate = {
+  rep_id: number;
+  rep_name: string;
+  revenue: number;
+  invoices: number;
+  customer_count: number;
+  revenue_share: number;
+};
+
+export type OrganizationSalesOverview = {
+  rows: SalesRow[];
+  monthlyTotals: MonthlyTotal[];
+  grandTotal: number;
+  invoiceCount: number;
+  activeDealers: number;
+  growthRate: number;
+  dealerAggregates: DealerAggregate[];
+  collectionAggregates: CollectionAggregate[];
+  repAggregates: RepAggregate[];
 };
 
 type FetchRangeArgs = {
@@ -34,6 +64,7 @@ type SalesDemoSelectRow = {
   customer_id: number;
   rep_id: number | null;
   invoice_number: string | null;
+  collection: string | null;
 };
 
 export async function fetchSalesRange({
@@ -45,7 +76,9 @@ export async function fetchSalesRange({
   const supabase = getSupabaseClient();
   let query = supabase
     .from("sales_demo")
-    .select("invoice_date, invoice_amount, customer_id, rep_id, invoice_number");
+    .select(
+      "invoice_date, invoice_amount, customer_id, rep_id, invoice_number, collection",
+    );
 
   if (start) {
     query = query.gte("invoice_date", start);
@@ -76,6 +109,7 @@ export async function fetchSalesRange({
     customer_id: Number(row.customer_id),
     rep_id: row.rep_id === null ? null : Number(row.rep_id),
     invoice_number: row.invoice_number ?? null,
+    collection: row.collection ?? null,
   }));
 }
 
@@ -130,18 +164,37 @@ async function fetchCustomerNames(customerIds: number[]): Promise<Map<number, st
   return map;
 }
 
-function aggregateDealers(
+export function aggregateDealers(
   rows: SalesRow[],
   nameMap: Map<number, string>,
   grandTotal: number,
 ): DealerAggregate[] {
-  const dealers = new Map<number, { revenue: number; invoices: number }>();
+  type DealerInfo = {
+    revenue: number;
+    invoices: number;
+    monthly: Map<string, { revenue: number; invoices: number }>;
+  };
+
+  const dealers = new Map<number, DealerInfo>();
 
   for (const row of rows) {
     const key = row.customer_id;
-    const current = dealers.get(key) ?? { revenue: 0, invoices: 0 };
+    const current =
+      dealers.get(key) ?? {
+        revenue: 0,
+        invoices: 0,
+        monthly: new Map<string, { revenue: number; invoices: number }>(),
+      };
     current.revenue += row.invoice_amount ?? 0;
     current.invoices += 1;
+    const month = row.invoice_date.slice(0, 7);
+    const monthBucket = current.monthly.get(month) ?? {
+      revenue: 0,
+      invoices: 0,
+    };
+    monthBucket.revenue += row.invoice_amount ?? 0;
+    monthBucket.invoices += 1;
+    current.monthly.set(month, monthBucket);
     dealers.set(key, current);
   }
 
@@ -154,6 +207,14 @@ function aggregateDealers(
       const share = grandTotal
         ? Number(((info.revenue / grandTotal) * 100).toFixed(1))
         : 0;
+
+      const months = Array.from(info.monthly.keys()).sort();
+      const latestMonth = months[months.length - 1];
+      const latestBucket = latestMonth ? info.monthly.get(latestMonth) : undefined;
+      const latestAvg = latestBucket && latestBucket.invoices
+        ? Number((latestBucket.revenue / latestBucket.invoices).toFixed(2))
+        : undefined;
+
       return {
         customer_id: customerId,
         dealer_name: nameMap.get(customerId) ?? `Dealer ${customerId}`,
@@ -161,6 +222,8 @@ function aggregateDealers(
         invoices: info.invoices,
         average_invoice: average,
         revenue_share: share,
+        latest_month: latestMonth,
+        latest_month_avg: latestAvg,
       } satisfies DealerAggregate;
     })
     .sort((a, b) => b.revenue - a.revenue);
@@ -190,5 +253,159 @@ export async function fetchRepSalesData(repId: number): Promise<RepSalesData> {
     invoiceCount,
     uniqueCustomers: uniqueCustomerIds.length,
     dealers,
+  };
+}
+
+function aggregateCollections(rows: SalesRow[], grandTotal: number): CollectionAggregate[] {
+  const map = new Map<string, { revenue: number; invoices: number }>();
+
+  for (const row of rows) {
+    const key = row.collection ?? "Uncategorized";
+    const entry = map.get(key) ?? { revenue: 0, invoices: 0 };
+    entry.revenue += row.invoice_amount ?? 0;
+    entry.invoices += 1;
+    map.set(key, entry);
+  }
+
+  return Array.from(map.entries())
+    .map(([collection, info]) => {
+      const revenue = Number(info.revenue.toFixed(2));
+      const share = grandTotal
+        ? Number(((info.revenue / grandTotal) * 100).toFixed(1))
+        : 0;
+      return {
+        collection,
+        revenue,
+        invoices: info.invoices,
+        revenue_share: share,
+      } satisfies CollectionAggregate;
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
+async function fetchRepNames(repIds: number[]): Promise<Map<number, string>> {
+  if (repIds.length === 0) return new Map();
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("sales_reps_demo")
+    .select("rep_id, rep_name")
+    .in("rep_id", repIds);
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ rep_id: number; rep_name: string }>;
+  const map = new Map<number, string>();
+  for (const row of rows) {
+    map.set(Number(row.rep_id), row.rep_name);
+  }
+  return map;
+}
+
+function aggregateReps(
+  rows: SalesRow[],
+  repNames: Map<number, string>,
+  grandTotal: number,
+): RepAggregate[] {
+  const reps = new Map<number, { revenue: number; invoices: number; customers: Set<number> }>();
+
+  for (const row of rows) {
+    if (row.rep_id == null) continue;
+    const entry =
+      reps.get(row.rep_id) ?? {
+        revenue: 0,
+        invoices: 0,
+        customers: new Set<number>(),
+      };
+    entry.revenue += row.invoice_amount ?? 0;
+    entry.invoices += 1;
+    entry.customers.add(row.customer_id);
+    reps.set(row.rep_id, entry);
+  }
+
+  return Array.from(reps.entries())
+    .map(([repId, info]) => {
+      const revenue = Number(info.revenue.toFixed(2));
+      const share = grandTotal
+        ? Number(((info.revenue / grandTotal) * 100).toFixed(1))
+        : 0;
+      return {
+        rep_id: repId,
+        rep_name: repNames.get(repId) ?? `Rep ${repId}`,
+        revenue,
+        invoices: info.invoices,
+        customer_count: info.customers.size,
+        revenue_share: share,
+      } satisfies RepAggregate;
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
+function calculateGrowthRate(monthlyTotals: MonthlyTotal[]): number {
+  if (monthlyTotals.length < 2) return 0;
+  const sorted = [...monthlyTotals].sort((a, b) => a.month.localeCompare(b.month));
+  const latest = sorted[sorted.length - 1];
+  const prev = sorted[sorted.length - 2];
+  if (!prev.total) return 0;
+  const delta = ((latest.total - prev.total) / prev.total) * 100;
+  return Number(delta.toFixed(1));
+}
+
+function calculateActiveDealers(rows: SalesRow[], windowDays = 90): number {
+  if (rows.length === 0) return 0;
+  const latestTimestamp = rows.reduce(
+    (max, row) => Math.max(max, Date.parse(row.invoice_date)),
+    0,
+  );
+  const threshold = new Date(latestTimestamp);
+  threshold.setDate(threshold.getDate() - windowDays);
+  const thresholdISO = threshold.toISOString().slice(0, 10);
+
+  const active = new Set<number>();
+  for (const row of rows) {
+    if (row.invoice_date >= thresholdISO) {
+      active.add(row.customer_id);
+    }
+  }
+  return active.size;
+}
+
+export async function fetchOrganizationSalesOverview({
+  start,
+  end,
+}: {
+  start?: string;
+  end?: string;
+} = {}): Promise<OrganizationSalesOverview> {
+  const now = new Date();
+  const yearStart = start ?? new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
+  const yearEnd = end ?? new Date(now.getFullYear() + 1, 0, 1).toISOString().slice(0, 10);
+
+  const rows = await fetchSalesRangeCached({ start: yearStart, end: yearEnd });
+  const grandTotal = calculateGrandTotal(rows);
+  const invoiceCount = rows.length;
+  const monthlyTotals = groupByMonth(rows);
+  const growthRate = calculateGrowthRate(monthlyTotals);
+  const activeDealers = calculateActiveDealers(rows);
+
+  const uniqueCustomerIds = Array.from(new Set(rows.map((row) => row.customer_id)));
+  const nameMap = await fetchCustomerNames(uniqueCustomerIds);
+
+  const dealerAggregates = aggregateDealers(rows, nameMap, grandTotal);
+  const collectionAggregates = aggregateCollections(rows, grandTotal);
+
+  const repIds = Array.from(new Set(rows.map((row) => row.rep_id ?? undefined).filter((id): id is number => typeof id === "number")));
+  const repNames = await fetchRepNames(repIds);
+  const repAggregates = aggregateReps(rows, repNames, grandTotal);
+
+  return {
+    rows,
+    monthlyTotals,
+    grandTotal,
+    invoiceCount,
+    activeDealers,
+    growthRate,
+    dealerAggregates,
+    collectionAggregates,
+    repAggregates,
   };
 }

@@ -4,6 +4,7 @@ export type SalesRow = {
   customer_id: number;
   rep_id: number | null;
   invoice_number: string | null;
+  collection: string | null;
 };
 
 export type MonthlyTotal = {
