@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   CustomersDemoRow,
   SalesDemoRow,
@@ -50,15 +50,22 @@ type SalesDataset = {
 };
 
 const fetchDataset = cache(async (): Promise<SalesDataset> => {
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseAdminClient();
   const [salesResult, customersResult, repsResult] = await Promise.all([
     supabase
       .from("sales_demo")
       .select(
         "customer_id, rep_id, invoice_amount, invoice_date, collection", 
-      ),
-    supabase.from("customers_demo").select("customer_id, dealer_name, rep_id"),
-    supabase.from("sales_reps_demo").select("rep_id, rep_name"),
+      )
+      .limit(1000000),
+    supabase
+      .from("customers_demo")
+      .select("customer_id, dealer_name, rep_id")
+      .limit(1000000),
+    supabase
+      .from("sales_reps_demo")
+      .select("rep_id, rep_name")
+      .limit(1000000),
   ]);
 
   if (salesResult.error) {
