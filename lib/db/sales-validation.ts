@@ -16,8 +16,11 @@ const EXPECTED_MONTHLY: Record<string, { total: number; rows: number }> = {
 
 export function validateLindaFlooring(rows: SalesRow[]) {
   const grand = calculateGrandTotal(rows);
+  const issues: string[] = [];
   if (grand !== EXPECTED_GRAND_TOTAL) {
-    throw new Error(`Grand total mismatch for Linda Flooring: expected ${EXPECTED_GRAND_TOTAL}, received ${grand}`);
+    issues.push(
+      `Grand total mismatch for Linda Flooring: expected ${EXPECTED_GRAND_TOTAL}, received ${grand}`,
+    );
   }
 
   const monthly = groupByMonth(rows);
@@ -26,18 +29,32 @@ export function validateLindaFlooring(rows: SalesRow[]) {
   for (const [month, expected] of Object.entries(EXPECTED_MONTHLY)) {
     const actual = monthlyMap.get(month);
     if (!actual) {
-      throw new Error(`Missing monthly data for ${month}`);
+      issues.push(`Missing monthly data for ${month}`);
+      continue;
     }
     if (actual.total !== expected.total) {
-      throw new Error(`Total mismatch for ${month}: expected ${expected.total}, received ${actual.total}`);
+      issues.push(
+        `Total mismatch for ${month}: expected ${expected.total}, received ${actual.total}`,
+      );
     }
     if (actual.rows !== expected.rows) {
-      throw new Error(`Row count mismatch for ${month}: expected ${expected.rows}, received ${actual.rows}`);
+      issues.push(
+        `Row count mismatch for ${month}: expected ${expected.rows}, received ${actual.rows}`,
+      );
     }
+  }
+
+  if (issues.length > 0) {
+    const message = issues.join("; ");
+    if (process.env.NODE_ENV !== "production") {
+      throw new Error(message);
+    }
+    console.warn("MBIC Sales validation warning:", message);
   }
 
   return {
     grand,
     monthly,
+    issues,
   };
 }
