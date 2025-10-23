@@ -51,6 +51,35 @@ npm run build
 - Supabase queries live in `lib/supabase/queries.ts` and are shared by page components and API handlers.
 - `middleware.ts` protects the Retell AI webhook by enforcing `RETELL_AI_SECRET`.
 
+## Data Architecture & Supabase Integration
+
+The MBIC dashboard relies on Supabase Postgres as the single source of truth. Below is a map of the current tables and where they surface in the UI.
+
+### Sales & Revenue (Dashboard + Sales pages)
+
+| Table | Purpose | Screen usage | Helper functions |
+| --- | --- | --- | --- |
+| `sales_demo` | Raw invoice data (amount, date, rep, customer). Columns include `sale_id`, `customer_id`, `rep_id`, `invoice_date`, `invoice_amount`, `collection`, etc. | Dashboard KPI cards, revenue trend, “Top Dealers” table, Sales Performance metrics | `lib/supabase/queries.ts` → `fetchRevenueSummary`, `fetchRevenueTrend`, `fetchTopDealers`, `fetchDealerBreakdownByRep`, `fetchRepSalesTrend`, `fetchDealerSalesTrend` |
+| `customers_demo` | Dealer records linked to reps (`rep_id`). Columns: `customer_id`, `dealer_name`, `rep_id`. | Resolves dealer names when aggregating revenue | Same helpers as above |
+| `sales_reps_demo` | Sales rep directory containing `rep_id`, `rep_name` (and additional profile columns). | Populates the Sales rep dropdown and the “Top Sales Reps by Revenue” ranking | `fetchSalesReps`, `fetchTopRepsByRevenue`, `fetchActiveCustomersByRep` |
+
+The helper util `fetchDataset` (in `lib/supabase/queries.ts`) batches all three tables per request. Numeric values coming from Supabase (`numeric` columns) are coerced to Numbers before aggregation so the UI can format them reliably.
+
+### Customer Sentiment
+
+| Table | Purpose | Screen usage | Helper functions |
+| --- | --- | --- | --- |
+| `sentiment_stories` | Stores qualitative feedback (`brand`, `summary`, `quote`, `sentiment`, `keywords`, `channel`, timestamps). | Customer Sentiment page cards (`/sentiment`) | `lib/supabase/sentiment.ts` → `fetchSentimentStories` |
+
+### Marketing (CPF Launchpad)
+
+| Table | Purpose | Screen usage | Helper / Sync |
+| --- | --- | --- | --- |
+| `marketing_cpf_launchpad_summary` | Daily KPI snapshot (`unique_visitors`, `sessions`, `bounce_rate`, `leads`, `cpl`, `daily_budget`). | Marketing KPI cards | Filled by Supabase Edge Function `fetch-cpf-launchpad-marketing-data` (nightly GitHub Action + manual sync button) |
+| `marketing_cpf_launchpad_daily` | Per-channel Google/Meta timeseries (`stat_date`, `channel`, `spend`, `leads`, `clicks`). | Leads by Platform & Daily Spend charts | Same Edge Function + manual sync |
+
+The frontend still ships with fallback seed data in `lib/data/marketing.ts`, but once the GA integration is fully wired, the Marketing screen will read directly from the Supabase tables above.
+
 ## Deployment (Netlify)
 
 1. Connect the GitHub repository to Netlify.

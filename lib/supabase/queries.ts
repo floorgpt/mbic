@@ -54,9 +54,11 @@ const fetchDataset = cache(async (): Promise<SalesDataset> => {
   const [salesResult, customersResult, repsResult] = await Promise.all([
     supabase
       .from("sales_demo")
-      .select("customer_id, rep_id, invoice_amount, invoice_date, collection"),
+      .select(
+        "customer_id, rep_id, invoice_amount, invoice_date, collection", 
+      ),
     supabase.from("customers_demo").select("customer_id, dealer_name, rep_id"),
-    supabase.from("sales_reps_demo").select("rep_id, rep_name, email, rep_phone"),
+    supabase.from("sales_reps_demo").select("rep_id, rep_name"),
   ]);
 
   if (salesResult.error) {
@@ -86,8 +88,9 @@ export async function fetchTotalSalesPerDealer(): Promise<DealerSales[]> {
 
   for (const sale of sales) {
     const dealerName = customerMap.get(sale.customer_id) ?? "Unknown Dealer";
+    const amount = Number(sale.invoice_amount ?? 0);
     const current = totals.get(dealerName) ?? 0;
-    totals.set(dealerName, current + sale.invoice_amount);
+    totals.set(dealerName, current + amount);
   }
 
   return Array.from(totals.entries())
@@ -119,8 +122,10 @@ export async function fetchMonthlyAveragesPerDealer(): Promise<
     const key = `${dealerName}__${month}`;
     const current = aggregates.get(key) ?? { total: 0, count: 0 };
 
+    const amount = Number(sale.invoice_amount ?? 0);
+
     aggregates.set(key, {
-      total: current.total + sale.invoice_amount,
+      total: current.total + amount,
       count: current.count + 1,
     });
   }
@@ -173,7 +178,7 @@ export async function fetchTopRepsByRevenue(limit = 10): Promise<
       invoices: 0,
       customers: new Set<number>(),
     };
-    current.total += sale.invoice_amount;
+    current.total += Number(sale.invoice_amount ?? 0);
     current.invoices += 1;
     current.customers.add(sale.customer_id);
     aggregate.set(sale.rep_id, current);
@@ -273,7 +278,7 @@ export async function fetchDealerBreakdownByRep(
     };
 
     aggregate.set(dealerName, {
-      invoice_total: current.invoice_total + sale.invoice_amount,
+      invoice_total: current.invoice_total + Number(sale.invoice_amount ?? 0),
       invoice_count: current.invoice_count + 1,
     });
   }
@@ -306,7 +311,7 @@ export async function fetchRepSalesTrend(repName: string) {
     if (sale.rep_id !== rep.rep_id) continue;
     const month = new Date(sale.invoice_date).toISOString().slice(0, 7);
     const current = trendMap.get(month) ?? 0;
-    trendMap.set(month, current + sale.invoice_amount);
+    trendMap.set(month, current + Number(sale.invoice_amount ?? 0));
   }
 
   return Array.from(trendMap.entries())
@@ -357,7 +362,7 @@ export async function fetchRevenueTrend() {
   for (const sale of sales) {
     const month = new Date(sale.invoice_date).toISOString().slice(0, 7);
     const current = trendMap.get(month) ?? 0;
-    trendMap.set(month, current + sale.invoice_amount);
+    trendMap.set(month, current + Number(sale.invoice_amount ?? 0));
   }
 
   return Array.from(trendMap.entries())
