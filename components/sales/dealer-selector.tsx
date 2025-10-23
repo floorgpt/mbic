@@ -11,9 +11,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+export type DealerOption = {
+  id: number;
+  name: string;
+};
+
 type DealerSelectorProps = {
-  dealers: string[];
-  selected: string | undefined;
+  dealers: DealerOption[];
+  selected: number | undefined;
   className?: string;
 };
 
@@ -40,14 +45,17 @@ export function DealerSelector({
   );
 
   return (
-    <Select value={selected} onValueChange={handleChange}>
+    <Select
+      value={typeof selected === "number" ? String(selected) : undefined}
+      onValueChange={handleChange}
+    >
       <SelectTrigger className={className}>
         <SelectValue placeholder="Select dealer" />
       </SelectTrigger>
       <SelectContent>
         {dealers.map((dealer) => (
-          <SelectItem key={dealer} value={dealer}>
-            {dealer}
+          <SelectItem key={dealer.id} value={String(dealer.id)}>
+            {dealer.name}
           </SelectItem>
         ))}
       </SelectContent>

@@ -1,6 +1,5 @@
-import { cache } from "react";
-
-import { calculateGrandTotal, fetchSalesRange, groupByMonth } from "@/lib/db/sales";
+import { calculateGrandTotal, groupByMonth } from "@/lib/db/sales";
+import type { SalesRow } from "@/types/sales";
 
 const EXPECTED_GRAND_TOTAL = 358192.14;
 const EXPECTED_MONTHLY: Record<string, { total: number; rows: number }> = {
@@ -15,13 +14,7 @@ const EXPECTED_MONTHLY: Record<string, { total: number; rows: number }> = {
   "2025-09": { total: 67073.56, rows: 22 },
 };
 
-export const validateSalesData = cache(async () => {
-  const rows = await fetchSalesRange({
-    customerId: 1,
-    start: "2025-01-01",
-    end: "2025-10-01",
-  });
-
+export function validateLindaFlooring(rows: SalesRow[]) {
   const grand = calculateGrandTotal(rows);
   if (grand !== EXPECTED_GRAND_TOTAL) {
     throw new Error(`Grand total mismatch for Linda Flooring: expected ${EXPECTED_GRAND_TOTAL}, received ${grand}`);
@@ -44,8 +37,7 @@ export const validateSalesData = cache(async () => {
   }
 
   return {
-    rows,
-    monthly,
     grand,
+    monthly,
   };
-});
+}

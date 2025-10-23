@@ -3,29 +3,17 @@ import { Users2 } from "lucide-react";
 
 import { DealerSalesTrend } from "@/components/charts/dealer-sales-trend";
 import { RepSalesTrend } from "@/components/charts/rep-sales-trend";
-import { DealerSelector } from "@/components/sales/dealer-selector";
+import { DealerSelector, type DealerOption } from "@/components/sales/dealer-selector";
+import { DealerBreakdownTable } from "@/components/sales/dealer-breakdown-table";
 import { SalesRepSelector } from "@/components/sales/rep-selector";
 import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils/format";
-import {
-  fetchActiveCustomersByRep,
-  fetchDealerBreakdownByRep,
-  fetchDealerSalesTrend,
-  fetchRepSalesTrend,
-  fetchSalesReps,
-} from "@/lib/supabase/queries";
-import { validateSalesData } from "@/lib/db/sales-validation";
+import { fetchSalesReps } from "@/lib/supabase/queries";
+import { fetchRepSalesData, groupByDealerMonth } from "@/lib/db/sales";
+import { validateLindaFlooring } from "@/lib/db/sales-validation";
 
 const DEFAULT_REP = "Juan Pedro Boscan";
 
@@ -36,7 +24,6 @@ type SalesPageProps = {
 };
 
 export default async function SalesPage({ searchParams }: SalesPageProps) {
-  await validateSalesData();
   const resolvedSearchParams: SearchParamsShape = searchParams
     ? await searchParams
     : {};
@@ -50,43 +37,70 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
   const rawRep = Array.isArray(resolvedSearchParams.rep)
     ? resolvedSearchParams.rep[0]
     : resolvedSearchParams.rep;
-  const selectedRep =
+  const selectedRepRow =
     reps.find(
       (rep) =>
         rep.rep_name.trim().toLowerCase() ===
         (rawRep ?? DEFAULT_REP)?.trim().toLowerCase(),
-    )?.rep_name ?? reps[0]?.rep_name;
+    ) ?? reps[0];
 
-  const [activeCustomers, breakdown, trend] = await Promise.all([
-    fetchActiveCustomersByRep(selectedRep),
-    fetchDealerBreakdownByRep(selectedRep),
-    fetchRepSalesTrend(selectedRep),
-  ]);
+  if (!selectedRepRow) {
+    notFound();
+  }
 
-  const totalRevenue = breakdown.reduce(
-    (acc, dealer) => acc + dealer.invoice_total,
-    0,
-  );
-  const totalInvoices = breakdown.reduce(
-    (acc, dealer) => acc + dealer.invoice_count,
-    0,
-  );
+  const selectedRep = selectedRepRow.rep_name;
+  const repId = selectedRepRow.rep_id;
 
-  const dealers = breakdown.map((dealer) => dealer.dealer_name);
+  const salesData = await fetchRepSalesData(repId);
+
+  // Validate Linda Flooring totals when viewing Juan Pedro Boscan
+  if (selectedRep.trim().toLowerCase() === DEFAULT_REP.toLowerCase()) {
+    const lindaRows = salesData.rows.filter(
+      (row) =>
+        row.customer_id === 1 &&
+        row.invoice_date >= "2025-01-01" &&
+        row.invoice_date < "2025-10-01",
+    );
+    if (lindaRows.length > 0) {
+      validateLindaFlooring(lindaRows);
+    }
+  }
+
+  const totalRevenue = salesData.grandTotal;
+  const totalInvoices = salesData.invoiceCount;
+  const customersHandled = salesData.uniqueCustomers;
+
+  const dealerOptions: DealerOption[] = salesData.dealers.map((dealer) => ({
+    id: dealer.customer_id,
+    name: dealer.dealer_name,
+  }));
+
   const rawDealer = Array.isArray(resolvedSearchParams.dealer)
     ? resolvedSearchParams.dealer[0]
     : resolvedSearchParams.dealer;
-  const selectedDealerName = rawDealer && dealers.includes(rawDealer)
-    ? rawDealer
-    : dealers[0];
+  const requestedDealerId = rawDealer ? Number(rawDealer) : undefined;
 
-  const selectedDealer = breakdown.find(
-    (dealer) => dealer.dealer_name === selectedDealerName,
+  const selectedDealerId = dealerOptions.some((dealer) => dealer.id === requestedDealerId)
+    ? requestedDealerId
+    : dealerOptions[0]?.id;
+
+  const selectedDealer = salesData.dealers.find(
+    (dealer) => dealer.customer_id === selectedDealerId,
   );
 
-  const dealerTrend = selectedDealerName
-    ? await fetchDealerSalesTrend(selectedRep, selectedDealerName)
+  const repTrend = salesData.monthlyTotals.map((item) => ({
+    month: item.month,
+    total_sales: item.total,
+  }));
+
+  const dealerTrendMonthly = selectedDealer
+    ? groupByDealerMonth(salesData.rows, selectedDealer.customer_id)
     : [];
+
+  const dealerTrend = dealerTrendMonthly.map((item) => ({
+    month: item.month,
+    total_sales: item.total,
+  }));
 
   return (
     <div className="space-y-8">
@@ -114,7 +128,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         />
         <KpiCard
           title="Customers Handled"
-          value={formatNumber(activeCustomers.active_customers)}
+          value={formatNumber(customersHandled)}
           delta={{
             value: "Unique dealers in the last 12 months",
             trend: "neutral",
@@ -131,11 +145,11 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         />
         <KpiCard
           title="Top Dealer"
-          value={breakdown[0]?.dealer_name ?? "—"}
+          value={salesData.dealers[0]?.dealer_name ?? "—"}
           delta={
-            breakdown[0]
+            salesData.dealers[0]
               ? {
-                  value: formatCurrency(breakdown[0].invoice_total),
+                  value: formatCurrency(salesData.dealers[0].revenue),
                   trend: "up",
                 }
               : undefined
@@ -154,7 +168,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
             </p>
           </CardHeader>
           <CardContent>
-            <RepSalesTrend data={trend} />
+            <RepSalesTrend data={repTrend} />
           </CardContent>
         </Card>
 
@@ -172,39 +186,8 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
               {formatCurrency(totalRevenue)}
             </Badge>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Dealer</TableHead>
-                  <TableHead className="text-right">Invoices</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Avg Invoice</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {breakdown.map((dealer) => (
-                  <TableRow key={dealer.dealer_name}>
-                    <TableCell className="font-medium">
-                      {dealer.dealer_name}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatNumber(dealer.invoice_count)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(dealer.invoice_total)}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {dealer.invoice_count
-                        ? formatCurrency(
-                            dealer.invoice_total / dealer.invoice_count,
-                          )
-                        : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <CardContent>
+            <DealerBreakdownTable dealers={salesData.dealers} />
           </CardContent>
         </Card>
       </section>
@@ -221,8 +204,8 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
               </p>
             </div>
             <DealerSelector
-              dealers={dealers}
-              selected={selectedDealerName}
+              dealers={dealerOptions}
+              selected={selectedDealerId}
               className="w-full md:w-64"
             />
           </CardHeader>
@@ -232,32 +215,27 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <KpiCard
                     title="Dealer Revenue"
-                    value={formatCurrency(selectedDealer.invoice_total)}
+                    value={formatCurrency(selectedDealer.revenue)}
                     delta={{
-                      value: `${formatNumber(selectedDealer.invoice_count)} invoices`,
+                      value: `${formatNumber(selectedDealer.invoices)} invoices`,
                       trend: "neutral",
                     }}
                   />
                   <KpiCard
                     title="Average Invoice"
                     value={
-                      selectedDealer.invoice_count
-                        ? formatCurrency(
-                            selectedDealer.invoice_total /
-                              selectedDealer.invoice_count,
-                          )
+                      selectedDealer.invoices
+                        ? formatCurrency(selectedDealer.average_invoice)
                         : formatCurrency(0)
                     }
                   />
                   <KpiCard
                     title="Revenue Share"
-                    value={formatPercent(
-                      (selectedDealer.invoice_total / totalRevenue || 0) * 100,
-                    )}
+                    value={formatPercent(selectedDealer.revenue_share)}
                   />
                   <KpiCard
                     title="Trend Months"
-                    value={`${dealerTrend.length}`}
+                    value={`${dealerTrendMonthly.length}`}
                     delta={{ value: "months tracked", trend: "neutral" }}
                   />
                 </div>
@@ -266,7 +244,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                     <DealerSalesTrend data={dealerTrend} />
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      We need more data before charting {selectedDealerName}.
+                      We need more data before charting {selectedDealer?.dealer_name ?? "this dealer"}.
                     </p>
                   )}
                 </div>

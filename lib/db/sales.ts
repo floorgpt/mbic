@@ -3,6 +3,24 @@ import { cache } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { MonthlyTotal, SalesRow } from "@/types/sales";
 
+export type DealerAggregate = {
+  customer_id: number;
+  dealer_name: string;
+  revenue: number;
+  invoices: number;
+  average_invoice: number;
+  revenue_share: number;
+};
+
+export type RepSalesData = {
+  rows: SalesRow[];
+  monthlyTotals: MonthlyTotal[];
+  grandTotal: number;
+  invoiceCount: number;
+  uniqueCustomers: number;
+  dealers: DealerAggregate[];
+};
+
 type FetchRangeArgs = {
   start?: string;
   end?: string;
@@ -87,3 +105,90 @@ export function calculateGrandTotal(rows: SalesRow[]): number {
 }
 
 export const fetchSalesRangeCached = cache(fetchSalesRange);
+
+async function fetchCustomerNames(customerIds: number[]): Promise<Map<number, string>> {
+  if (customerIds.length === 0) {
+    return new Map();
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("customers_demo")
+    .select("customer_id, dealer_name")
+    .in("customer_id", customerIds);
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = (data ?? []) as Array<{ customer_id: number; dealer_name: string }>;
+
+  const map = new Map<number, string>();
+  for (const row of rows) {
+    map.set(Number(row.customer_id), row.dealer_name);
+  }
+  return map;
+}
+
+function aggregateDealers(
+  rows: SalesRow[],
+  nameMap: Map<number, string>,
+  grandTotal: number,
+): DealerAggregate[] {
+  const dealers = new Map<number, { revenue: number; invoices: number }>();
+
+  for (const row of rows) {
+    const key = row.customer_id;
+    const current = dealers.get(key) ?? { revenue: 0, invoices: 0 };
+    current.revenue += row.invoice_amount ?? 0;
+    current.invoices += 1;
+    dealers.set(key, current);
+  }
+
+  return Array.from(dealers.entries())
+    .map(([customerId, info]) => {
+      const revenue = Number(info.revenue.toFixed(2));
+      const average = info.invoices
+        ? Number((info.revenue / info.invoices).toFixed(2))
+        : 0;
+      const share = grandTotal
+        ? Number(((info.revenue / grandTotal) * 100).toFixed(1))
+        : 0;
+      return {
+        customer_id: customerId,
+        dealer_name: nameMap.get(customerId) ?? `Dealer ${customerId}`,
+        revenue,
+        invoices: info.invoices,
+        average_invoice: average,
+        revenue_share: share,
+      } satisfies DealerAggregate;
+    })
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
+export function groupByDealerMonth(rows: SalesRow[], dealerId: number): MonthlyTotal[] {
+  const filtered = rows.filter((row) => row.customer_id === dealerId);
+  return groupByMonth(filtered);
+}
+
+export async function fetchRepSalesData(repId: number): Promise<RepSalesData> {
+  const rows = await fetchSalesRangeCached({ repId });
+
+  const grandTotal = calculateGrandTotal(rows);
+  const invoiceCount = rows.length;
+
+  const uniqueCustomerIds = Array.from(new Set(rows.map((row) => row.customer_id)));
+  const nameMap = await fetchCustomerNames(uniqueCustomerIds);
+
+  const dealers = aggregateDealers(rows, nameMap, grandTotal);
+  const monthlyTotals = groupByMonth(rows);
+
+  return {
+    rows,
+    monthlyTotals,
+    grandTotal,
+    invoiceCount,
+    uniqueCustomers: uniqueCustomerIds.length,
+    dealers,
+  };
+}
