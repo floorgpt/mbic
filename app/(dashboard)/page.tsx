@@ -19,26 +19,100 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils/format";
-import { fetchOrganizationSalesOverview } from "@/lib/db/sales";
+import {
+  getOrgKpis,
+  getOrgMonthly,
+  getTopCollections,
+  getTopDealers,
+  getTopReps,
+} from "@/lib/mbic-dashboard";
 
 export const revalidate = 60;
 
-export default async function DashboardPage() {
-  const overview = await fetchOrganizationSalesOverview();
+type DashboardSearchParams = Record<string, string | string[] | undefined>;
+
+function formatDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeParam(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+function resolveDateParam(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback;
+  }
+  return formatDate(parsed);
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: DashboardSearchParams;
+}) {
+  const now = new Date();
+  const defaultFrom = formatDate(new Date(now.getFullYear(), 0, 1));
+  const defaultTo = formatDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+
+  const from = resolveDateParam(normalizeParam(searchParams?.from), defaultFrom);
+  const to = resolveDateParam(normalizeParam(searchParams?.to), defaultTo);
+
+  const [kpis, monthly, collections, dealers, reps] = await Promise.all([
+    getOrgKpis({ from, to }),
+    getOrgMonthly({ from, to }),
+    getTopCollections({ from, to, topN: 6 }),
+    getTopDealers({ from, to, topN: 5 }),
+    getTopReps({ from, to, topN: 10 }),
+  ]);
+
   const summary = {
-    totalRevenue: overview.grandTotal,
-    growthRate: overview.growthRate,
-    activeDealers: overview.activeDealers,
+    totalRevenue: Number(kpis.revenue_ytd?.toFixed(2) ?? 0),
+    growthRate: kpis.growth_rate,
+    activeDealers: kpis.active_dealers,
   };
 
-  const trend = overview.monthlyTotals.map((item) => ({
+  const trend = monthly.map((item) => ({
     month: item.month,
-    total_sales: item.total,
+    total_sales: Number(item.month_total.toFixed(2)),
   }));
 
-  const topDealers = overview.dealerAggregates.slice(0, 5);
-  const topCollections = overview.collectionAggregates.slice(0, 5);
-  const topReps = overview.repAggregates.slice(0, 10);
+  const revenueYtd = summary.totalRevenue || 0;
+
+  const topDealers = dealers.map((dealer) => {
+    const revenueShare =
+      revenueYtd > 0 ? Number(((dealer.revenue_ytd / revenueYtd) * 100).toFixed(1)) : 0;
+    return {
+      customer_id: dealer.customer_id,
+      dealer_name: dealer.dealer_name,
+      revenue: Number(dealer.revenue_ytd.toFixed(2)),
+      latest_month_avg: Number(dealer.monthly_avg.toFixed(2)),
+      average_invoice: Number(dealer.monthly_avg.toFixed(2)),
+      revenue_share: revenueShare,
+    };
+  });
+
+  const topCollections = collections.map((collection) => ({
+    collection: collection.collection,
+    revenue: Number(collection.revenue.toFixed(2)),
+    revenue_share: collection.share_pct,
+  }));
+
+  const topReps = reps.map((rep) => ({
+    rep_id: rep.rep_id,
+    rep_name: rep.rep_name,
+    revenue: Number(rep.revenue.toFixed(2)),
+    invoices: rep.invoices,
+    customer_count: rep.active_dealers,
+  }));
+
+  const hasGrowthRate = summary.growthRate != null;
+  const growthRateValue = summary.growthRate ?? 0;
 
   return (
     <div className="space-y-8">
@@ -52,11 +126,13 @@ export default async function DashboardPage() {
           title="Revenue YTD"
           value={formatCurrency(summary.totalRevenue)}
           delta={{
-            value: `${summary.growthRate >= 0 ? "+" : ""}${formatPercent(summary.growthRate)}`,
+            value: hasGrowthRate
+              ? `${growthRateValue >= 0 ? "+" : ""}${formatPercent(growthRateValue)}`
+              : "No month-over-month delta",
             trend:
-              summary.growthRate > 0
+              hasGrowthRate && growthRateValue > 0
                 ? "up"
-                : summary.growthRate < 0
+                : hasGrowthRate && growthRateValue < 0
                   ? "down"
                   : "neutral",
             description: "vs last month",
@@ -76,16 +152,17 @@ export default async function DashboardPage() {
         />
         <KpiCard
           title="Growth Rate"
-          value={formatPercent(summary.growthRate)}
+          value={hasGrowthRate ? formatPercent(growthRateValue) : "—"}
           delta={{
-            value:
-              summary.growthRate >= 0
+            value: hasGrowthRate
+              ? growthRateValue >= 0
                 ? "Momentum increasing"
-                : "Review pipeline health",
+                : "Review pipeline health"
+              : "Not enough data",
             trend:
-              summary.growthRate > 0
+              hasGrowthRate && growthRateValue > 0
                 ? "up"
-                : summary.growthRate < 0
+                : hasGrowthRate && growthRateValue < 0
                   ? "down"
                   : "neutral",
           }}
