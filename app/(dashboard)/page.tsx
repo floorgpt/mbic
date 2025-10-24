@@ -30,6 +30,9 @@ import {
 export const revalidate = 60;
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
+type DashboardPageProps = {
+  searchParams?: DashboardSearchParams;
+};
 
 function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -51,11 +54,7 @@ function resolveDateParam(value: string | undefined, fallback: string): string {
   return formatDate(parsed);
 }
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams?: DashboardSearchParams;
-}) {
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const now = new Date();
   const defaultFrom = formatDate(new Date(now.getFullYear(), 0, 1));
   const defaultTo = formatDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
