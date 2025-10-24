@@ -1,5 +1,4 @@
-import { calculateGrandTotal, groupByMonth } from "@/lib/db/sales";
-import type { SalesRow } from "@/types/sales";
+import type { DealerMonthlyRow } from "@/lib/mbic-sales";
 
 const EXPECTED_GRAND_TOTAL = 358192.14;
 const EXPECTED_MONTHLY: Record<string, { total: number; rows: number }> = {
@@ -14,8 +13,10 @@ const EXPECTED_MONTHLY: Record<string, { total: number; rows: number }> = {
   "2025-09": { total: 67073.56, rows: 22 },
 };
 
-export function validateLindaFlooring(rows: SalesRow[]) {
-  const grand = calculateGrandTotal(rows);
+export function validateLindaFlooring(monthly: DealerMonthlyRow[]) {
+  const grand = Number(
+    monthly.reduce((sum, row) => sum + (row.month_revenue ?? 0), 0).toFixed(2),
+  );
   const issues: string[] = [];
   if (grand !== EXPECTED_GRAND_TOTAL) {
     issues.push(
@@ -23,8 +24,9 @@ export function validateLindaFlooring(rows: SalesRow[]) {
     );
   }
 
-  const monthly = groupByMonth(rows);
-  const monthlyMap = new Map(monthly.map((entry) => [entry.month, entry]));
+  const monthlyMap = new Map(
+    monthly.map((entry) => [entry.month_label, entry]),
+  );
 
   for (const [month, expected] of Object.entries(EXPECTED_MONTHLY)) {
     const actual = monthlyMap.get(month);
@@ -32,14 +34,15 @@ export function validateLindaFlooring(rows: SalesRow[]) {
       issues.push(`Missing monthly data for ${month}`);
       continue;
     }
-    if (actual.total !== expected.total) {
+    const actualTotal = Number((actual.month_revenue ?? 0).toFixed(2));
+    if (actualTotal !== expected.total) {
       issues.push(
-        `Total mismatch for ${month}: expected ${expected.total}, received ${actual.total}`,
+        `Total mismatch for ${month}: expected ${expected.total}, received ${actualTotal}`,
       );
     }
-    if (actual.rows !== expected.rows) {
+    if (actual.invoice_count !== expected.rows) {
       issues.push(
-        `Row count mismatch for ${month}: expected ${expected.rows}, received ${actual.rows}`,
+        `Row count mismatch for ${month}: expected ${expected.rows}, received ${actual.invoice_count}`,
       );
     }
   }
@@ -54,7 +57,7 @@ export function validateLindaFlooring(rows: SalesRow[]) {
 
   return {
     grand,
-    monthly,
+    monthly: Array.from(monthlyMap.values()),
     issues,
   };
 }

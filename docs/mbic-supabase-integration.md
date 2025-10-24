@@ -18,10 +18,10 @@
 ## Fixes in Place
 1. **Data-Year Resolution** (`lib/db/sales.ts`)  
    - Added `resolveReportingWindow()` to query Supabase for the latest `invoice_date` and derive the reporting year, ensuring all YTD calculations align with the dataset instead of server clock drift.
-   - All aggregated endpoints (`fetchOrganizationSalesOverview`, `fetchRepSalesData`) now call the non-cached `fetchSalesRange`, so fresh rows are fetched on every request.
-2. **Admin Client Everywhere** (`lib/supabase/queries.ts`)  
+   - Sales KPIs now rely on RPC-backed helpers (`lib/mbic-sales.ts`) instead of raw invoice loops, so every request rehydrates totals directly from Postgres.
+2. **Admin Client Everywhere** (`lib/supabase/queries.ts`, `lib/mbic-sales.ts`)  
    - Replaced the anon browser client with the service-role admin client and bumped `.limit(1000000)` for `sales_demo`, `customers_demo`, and `sales_reps_demo`.  
-   - Guarantees that per-rep, per-collection, and dealer breakdowns load the entire transactional history the UI expects.
+   - Guarantees that per-rep, per-collection, and dealer breakdowns load the entire transactional history the UI expects while the new RPC helpers provide pre-aggregated datasets for dashboards.
 
 These changes bring the backend queries in line with Supabase’s authoritative totals when run locally with valid credentials.
 

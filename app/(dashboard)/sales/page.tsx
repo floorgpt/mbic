@@ -12,9 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils/format";
 import { fetchSalesReps } from "@/lib/supabase/queries";
-import { fetchRepSalesData, groupByDealerMonth } from "@/lib/db/sales";
+import { fetchRepSalesData } from "@/lib/db/sales";
 import { validateLindaFlooring } from "@/lib/db/sales-validation";
-
+import { getDealerMonthly } from "@/lib/mbic-sales";
 const DEFAULT_REP = "Juan Pedro Boscan";
 
 type SearchParamsShape = Record<string, string | string[] | undefined>;
@@ -53,19 +53,6 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
 
   const salesData = await fetchRepSalesData(repId);
 
-  // Validate Linda Flooring totals when viewing Juan Pedro Boscan
-  if (selectedRep.trim().toLowerCase() === DEFAULT_REP.toLowerCase()) {
-    const lindaRows = salesData.rows.filter(
-      (row) =>
-        row.customer_id === 1 &&
-        row.invoice_date >= "2025-01-01" &&
-        row.invoice_date < "2025-10-01",
-    );
-    if (lindaRows.length > 0) {
-      validateLindaFlooring(lindaRows);
-    }
-  }
-
   const totalRevenue = salesData.grandTotal;
   const totalInvoices = salesData.invoiceCount;
   const customersHandled = salesData.uniqueCustomers;
@@ -93,14 +80,22 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
     total_sales: item.total,
   }));
 
-  const dealerTrendMonthly = selectedDealer
-    ? groupByDealerMonth(salesData.rows, selectedDealer.customer_id)
+  const dealerMonthly = selectedDealer
+    ? await getDealerMonthly(repId, selectedDealer.customer_id, salesData.dateRange)
     : [];
 
-  const dealerTrend = dealerTrendMonthly.map((item) => ({
-    month: item.month,
-    total_sales: item.total,
+  const dealerTrend = dealerMonthly.map((item) => ({
+    month: item.month_label,
+    total_sales: item.month_revenue,
   }));
+
+  // Validate Linda Flooring totals when viewing Juan Pedro Boscan
+  if (selectedRep.trim().toLowerCase() === DEFAULT_REP.toLowerCase()) {
+    const lindaMonthly = await getDealerMonthly(repId, 1, salesData.dateRange);
+    if (lindaMonthly.length > 0) {
+      validateLindaFlooring(lindaMonthly);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -235,7 +230,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                   />
                   <KpiCard
                     title="Trend Months"
-                    value={`${dealerTrendMonthly.length}`}
+                    value={`${dealerMonthly.length}`}
                     delta={{ value: "months tracked", trend: "neutral" }}
                   />
                 </div>

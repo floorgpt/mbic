@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getRepDealers, getRepKpis, getRepMonthly, type DateRange } from "@/lib/mbic-sales";
 import type { MonthlyTotal, SalesRow } from "@/types/sales";
 
 export type DealerAggregate = {
@@ -13,12 +14,18 @@ export type DealerAggregate = {
 };
 
 export type RepSalesData = {
-  rows: SalesRow[];
   monthlyTotals: MonthlyTotal[];
   grandTotal: number;
   invoiceCount: number;
   uniqueCustomers: number;
   dealers: DealerAggregate[];
+  dateRange: DateRange;
+  repId: number;
+  topDealer?: {
+    id: number | null;
+    name: string | null;
+    revenue: number | null;
+  };
 };
 
 export type CollectionAggregate = {
@@ -263,30 +270,58 @@ export function aggregateDealers(
     .sort((a, b) => b.revenue - a.revenue);
 }
 
-export function groupByDealerMonth(rows: SalesRow[], dealerId: number): MonthlyTotal[] {
-  const filtered = rows.filter((row) => row.customer_id === dealerId);
-  return groupByMonth(filtered);
-}
+export async function fetchRepSalesData(
+  repId: number,
+  range?: DateRange,
+): Promise<RepSalesData> {
+  const resolved = await resolveReportingWindow(range?.from, range?.to);
+  const effectiveRange: DateRange = {
+    from: range?.from ?? resolved.start,
+    to: range?.to ?? resolved.end,
+  };
 
-export async function fetchRepSalesData(repId: number): Promise<RepSalesData> {
-  const rows = await fetchSalesRange({ repId });
+  const [kpis, monthlyRows, dealerRows] = await Promise.all([
+    getRepKpis(repId, effectiveRange),
+    getRepMonthly(repId, effectiveRange),
+    getRepDealers(repId, effectiveRange, { limit: 500, offset: 0 }),
+  ]);
 
-  const grandTotal = calculateGrandTotal(rows);
-  const invoiceCount = rows.length;
+  const grandTotal = Number(kpis.total_revenue ?? 0);
+  const invoiceCount = Number(kpis.invoice_count ?? 0);
+  const uniqueCustomers = Number(kpis.unique_customers ?? 0);
 
-  const uniqueCustomerIds = Array.from(new Set(rows.map((row) => row.customer_id)));
-  const nameMap = await fetchCustomerNames(uniqueCustomerIds);
+  const dealers: DealerAggregate[] = dealerRows.map((row) => {
+    const revenue = Number(row.revenue ?? 0);
+    const share = grandTotal > 0 ? Number(((revenue / grandTotal) * 100).toFixed(1)) : 0;
+    return {
+      customer_id: row.customer_id,
+      dealer_name: row.dealer_name ?? `Dealer ${row.customer_id}`,
+      revenue: Number(revenue.toFixed(2)),
+      invoices: row.invoices,
+      average_invoice: Number((row.avg_invoice ?? 0).toFixed(2)),
+      revenue_share: share,
+    };
+  });
 
-  const dealers = aggregateDealers(rows, nameMap, grandTotal);
-  const monthlyTotals = groupByMonth(rows);
+  const monthlyTotals: MonthlyTotal[] = monthlyRows.map((row) => ({
+    month: row.month_label,
+    total: Number(row.month_revenue.toFixed(2)),
+    rows: row.invoice_count,
+  }));
 
   return {
-    rows,
     monthlyTotals,
-    grandTotal,
+    grandTotal: Number(grandTotal.toFixed(2)),
     invoiceCount,
-    uniqueCustomers: uniqueCustomerIds.length,
+    uniqueCustomers,
     dealers,
+    dateRange: effectiveRange,
+    repId,
+    topDealer: {
+      id: kpis.top_dealer_id ?? null,
+      name: kpis.top_dealer_name ?? null,
+      revenue: kpis.top_dealer_revenue ?? null,
+    },
   };
 }
 
