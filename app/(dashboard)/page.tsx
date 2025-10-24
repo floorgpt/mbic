@@ -31,7 +31,7 @@ export const revalidate = 60;
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
 type DashboardPageProps = {
-  searchParams?: DashboardSearchParams;
+  searchParams?: DashboardSearchParams | Promise<DashboardSearchParams>;
 };
 
 function formatDate(date: Date) {
@@ -55,12 +55,16 @@ function resolveDateParam(value: string | undefined, fallback: string): string {
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const resolvedSearchParams = searchParams
+    ? await Promise.resolve(searchParams)
+    : undefined;
+
   const now = new Date();
   const defaultFrom = formatDate(new Date(now.getFullYear(), 0, 1));
   const defaultTo = formatDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
 
-  const from = resolveDateParam(normalizeParam(searchParams?.from), defaultFrom);
-  const to = resolveDateParam(normalizeParam(searchParams?.to), defaultTo);
+  const from = resolveDateParam(normalizeParam(resolvedSearchParams?.from), defaultFrom);
+  const to = resolveDateParam(normalizeParam(resolvedSearchParams?.to), defaultTo);
 
   const [kpis, monthly, collections, dealers, reps] = await Promise.all([
     getOrgKpis({ from, to }),
