@@ -19,13 +19,14 @@ const DEFAULT_REP = "Juan Pedro Boscan";
 
 type SearchParamsShape = Record<string, string | string[] | undefined>;
 type SalesPageProps = {
-  searchParams?: Promise<SearchParamsShape>;
+  searchParams?: SearchParamsShape | Promise<SearchParamsShape>;
 };
 
 export default async function SalesPage({ searchParams }: SalesPageProps) {
-  const resolvedSearchParams: SearchParamsShape = searchParams
-    ? await searchParams
-    : {};
+  const resolvedSearchParams: SearchParamsShape =
+    searchParams && typeof (searchParams as Promise<unknown>)?.then === "function"
+      ? await (searchParams as Promise<SearchParamsShape>)
+      : ((searchParams as SearchParamsShape) ?? {});
 
   const reps = await fetchSalesReps();
 

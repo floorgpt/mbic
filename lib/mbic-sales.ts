@@ -1,3 +1,5 @@
+'use server';
+
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export type DateRange = {

@@ -51,18 +51,21 @@ function resolveDateParam(value: string | undefined, fallback: string): string {
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
 type DashboardPageProps = {
-  searchParams?: Promise<DashboardSearchParams>;
+  searchParams?: DashboardSearchParams | Promise<DashboardSearchParams>;
 };
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const sp =
+    searchParams && typeof (searchParams as Promise<unknown>)?.then === "function"
+      ? await (searchParams as Promise<DashboardSearchParams>)
+      : ((searchParams as DashboardSearchParams) ?? {});
 
   const now = new Date();
   const defaultFrom = formatDate(new Date(now.getFullYear(), 0, 1));
   const defaultTo = formatDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
 
-  const from = resolveDateParam(normalizeParam(resolvedSearchParams?.from), defaultFrom);
-  const to = resolveDateParam(normalizeParam(resolvedSearchParams?.to), defaultTo);
+  const from = resolveDateParam(normalizeParam(sp.from), defaultFrom);
+  const to = resolveDateParam(normalizeParam(sp.to), defaultTo);
 
   const [kpis, monthly, collections, dealers, reps] = await Promise.all([
     getOrgKpis({ from, to }),
