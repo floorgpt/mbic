@@ -1,4 +1,3 @@
-import type { PageProps } from "next";
 import {
   ArrowUpRight,
   LineChart as LineChartIcon,
@@ -50,11 +49,16 @@ function resolveDateParam(value: string | undefined, fallback: string): string {
   return formatDate(parsed);
 }
 
-export default async function DashboardPage({ searchParams }: PageProps) {
+type DashboardSearchParams = Record<string, string | string[] | undefined>;
+type DashboardPageProps = {
+  searchParams?: DashboardSearchParams | Promise<DashboardSearchParams>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams =
-    searchParams && typeof (searchParams as Promise<unknown>).then === "function"
-      ? await (searchParams as Promise<Record<string, string | string[] | undefined>>)
-      : ((searchParams ?? {}) as Record<string, string | string[] | undefined>);
+    searchParams && typeof (searchParams as Promise<unknown>)?.then === "function"
+      ? await (searchParams as Promise<DashboardSearchParams>)
+      : ((searchParams as DashboardSearchParams) ?? {});
 
   const now = new Date();
   const defaultFrom = formatDate(new Date(now.getFullYear(), 0, 1));
