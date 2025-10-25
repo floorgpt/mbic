@@ -1,3 +1,4 @@
+import type { PageProps } from "next";
 import { notFound } from "next/navigation";
 import { Users2 } from "lucide-react";
 
@@ -19,14 +20,11 @@ const DEFAULT_REP = "Juan Pedro Boscan";
 
 type SearchParamsShape = Record<string, string | string[] | undefined>;
 
-type SalesPageProps = {
-  searchParams?: SearchParamsShape | Promise<SearchParamsShape>;
-};
-
-export default async function SalesPage({ searchParams }: SalesPageProps) {
-  const resolvedSearchParams: SearchParamsShape = searchParams
-    ? await Promise.resolve(searchParams)
-    : {};
+export default async function SalesPage({ searchParams }: PageProps) {
+  const resolvedSearchParams: SearchParamsShape =
+    searchParams && typeof (searchParams as Promise<unknown>).then === "function"
+      ? await (searchParams as Promise<SearchParamsShape>)
+      : ((searchParams ?? {}) as SearchParamsShape);
 
   const reps = await fetchSalesReps();
 
