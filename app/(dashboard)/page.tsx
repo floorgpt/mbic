@@ -51,14 +51,11 @@ function resolveDateParam(value: string | undefined, fallback: string): string {
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
 type DashboardPageProps = {
-  searchParams?: DashboardSearchParams | Promise<DashboardSearchParams>;
+  searchParams?: Promise<DashboardSearchParams>;
 };
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
-  const resolvedSearchParams =
-    searchParams && typeof (searchParams as Promise<unknown>)?.then === "function"
-      ? await (searchParams as Promise<DashboardSearchParams>)
-      : ((searchParams as DashboardSearchParams) ?? {});
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   const now = new Date();
   const defaultFrom = formatDate(new Date(now.getFullYear(), 0, 1));
