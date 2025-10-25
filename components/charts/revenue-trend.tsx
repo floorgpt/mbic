@@ -151,6 +151,8 @@ export function RevenueTrend({
               stroke="hsl(var(--chart-1))"
               fill={`url(#${gradientIds.ytd})`}
               strokeWidth={2}
+              dot={{ r: 3, strokeWidth: 2 }}
+              activeDot={{ r: 5 }}
               name="Revenue"
             />
             <ChartTooltip
@@ -193,6 +195,8 @@ export function RevenueTrend({
               stroke="hsl(var(--chart-1))"
               fill={`url(#${gradientIds.qtd})`}
               strokeWidth={2}
+              dot={{ r: 3, strokeWidth: 2 }}
+              activeDot={{ r: 5 }}
               name="Revenue"
             />
             <ChartTooltip
@@ -235,6 +239,8 @@ export function RevenueTrend({
               stroke="hsl(var(--chart-1))"
               fill={`url(#${gradientIds.mtd})`}
               strokeWidth={2}
+              dot={{ r: 3, strokeWidth: 2 }}
+              activeDot={{ r: 5 }}
               name="Revenue"
             />
             <ChartTooltip

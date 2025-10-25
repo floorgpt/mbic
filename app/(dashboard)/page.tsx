@@ -5,9 +5,10 @@ import {
   Users,
 } from "lucide-react";
 
+import { TopProductsGrid } from "@/components/dashboard/top-products-grid";
+import { RevenueTrend } from "@/components/charts/revenue-trend";
 import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
-import { RevenueTrend } from "@/components/charts/revenue-trend";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,20 +19,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils/format";
 import {
   getOrgKpis,
   getOrgMonthly,
-  getTopCollections,
   getTopDealers,
+  getTopProducts,
   getTopReps,
 } from "@/lib/mbic-dashboard";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+  formatNumber,
+  formatPercentWhole,
+} from "@/lib/utils/format";
 
 export const revalidate = 60;
 
-function formatDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
+const DEFAULT_FROM = "2025-01-01";
+const DEFAULT_TO = "2025-10-01";
+
+type DashboardSearchParams = Record<string, string | string[] | undefined>;
+type DashboardPageProps = {
+  searchParams?: Promise<DashboardSearchParams>;
+};
 
 function normalizeParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) {
@@ -46,77 +56,64 @@ function resolveDateParam(value: string | undefined, fallback: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return fallback;
   }
-  return formatDate(parsed);
+  return parsed.toISOString().slice(0, 10);
 }
 
-type DashboardSearchParams = Record<string, string | string[] | undefined>;
-type DashboardPageProps = {
-  searchParams?: DashboardSearchParams | Promise<DashboardSearchParams>;
-};
+function DataPlaceholder({ message = "Data available soon." }: { message?: string }) {
+  return (
+    <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-muted bg-muted/40 p-6 text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+}
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
-  const sp =
-    searchParams && typeof (searchParams as Promise<unknown>)?.then === "function"
-      ? await (searchParams as Promise<DashboardSearchParams>)
-      : ((searchParams as DashboardSearchParams) ?? {});
+  const sp = await (searchParams ?? Promise.resolve({} as DashboardSearchParams));
 
-  const now = new Date();
-  const defaultFrom = formatDate(new Date(now.getFullYear(), 0, 1));
-  const defaultTo = formatDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+  const from = resolveDateParam(normalizeParam(sp.from), DEFAULT_FROM);
+  const to = resolveDateParam(normalizeParam(sp.to), DEFAULT_TO);
 
-  const from = resolveDateParam(normalizeParam(sp.from), defaultFrom);
-  const to = resolveDateParam(normalizeParam(sp.to), defaultTo);
-
-  const [kpis, monthly, collections, dealers, reps] = await Promise.all([
+  const [kpis, monthly, products, dealers, reps] = await Promise.all([
     getOrgKpis({ from, to }),
     getOrgMonthly({ from, to }),
-    getTopCollections({ from, to, topN: 6 }),
-    getTopDealers({ from, to, topN: 5 }),
+    getTopProducts({ from, to }),
+    getTopDealers({ from, to, topN: 10 }),
     getTopReps({ from, to, topN: 10 }),
   ]);
 
-  const summary = {
-    totalRevenue: Number(kpis.revenue_ytd?.toFixed(2) ?? 0),
-    growthRate: kpis.growth_rate,
-    activeDealers: kpis.active_dealers,
-  };
+  const totalRevenue = Number(kpis.revenue_ytd.toFixed(2));
+  const growthRateValue = kpis.growth_rate ?? 0;
+  const revenueDeltaDescription = kpis.prior_period_available
+    ? "vs prior year"
+    : "No YoY — using 2025 YTD (Jan–Sep).";
+  const revenueDeltaValue = kpis.prior_period_available
+    ? `${growthRateValue >= 0 ? "+" : ""}${formatPercentWhole(growthRateValue)}`
+    : "—";
 
   const trend = monthly.map((item) => ({
     month: item.month,
     total_sales: Number(item.month_total.toFixed(2)),
   }));
+  const hasTrend = trend.length > 0;
 
-  const revenueYtd = summary.totalRevenue || 0;
-
-  const topDealers = dealers.map((dealer) => {
-    const revenueShare =
-      revenueYtd > 0 ? Number(((dealer.revenue_ytd / revenueYtd) * 100).toFixed(1)) : 0;
-    return {
-      customer_id: dealer.customer_id,
-      dealer_name: dealer.dealer_name,
-      revenue: Number(dealer.revenue_ytd.toFixed(2)),
-      latest_month_avg: Number(dealer.monthly_avg.toFixed(2)),
-      average_invoice: Number(dealer.monthly_avg.toFixed(2)),
-      revenue_share: revenueShare,
-    };
-  });
-
-  const topCollections = collections.map((collection) => ({
-    collection: collection.collection,
-    revenue: Number(collection.revenue.toFixed(2)),
-    revenue_share: collection.share_pct,
+  const dealerRows = dealers.map((dealer, index) => ({
+    rank: index + 1,
+    name: dealer.dealer_name,
+    revenue: dealer.revenue_ytd,
+    monthly: dealer.monthly_avg,
+    share: dealer.share_pct,
+    rep: dealer.rep_initials ?? "—",
   }));
 
-  const topReps = reps.map((rep) => ({
-    rep_id: rep.rep_id,
-    rep_name: rep.rep_name,
-    revenue: Number(rep.revenue.toFixed(2)),
-    invoices: rep.invoices,
-    customer_count: rep.active_dealers,
+  const repRows = reps.map((rep, index) => ({
+    rank: index + 1,
+    name: rep.rep_name,
+    revenue: rep.revenue_ytd,
+    monthly: rep.monthly_avg,
+    active: rep.active_customers,
+    total: rep.total_customers,
+    activePct: rep.active_pct,
   }));
-
-  const hasGrowthRate = summary.growthRate != null;
-  const growthRateValue = summary.growthRate ?? 0;
 
   return (
     <div className="space-y-8">
@@ -128,27 +125,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Revenue YTD"
-          value={formatCurrency(summary.totalRevenue)}
+          value={formatCurrencyCompact(totalRevenue)}
           delta={{
-            value: hasGrowthRate
-              ? `${growthRateValue >= 0 ? "+" : ""}${formatPercent(growthRateValue)}`
-              : "No month-over-month delta",
+            value: revenueDeltaValue,
             trend:
-              hasGrowthRate && growthRateValue > 0
+              kpis.prior_period_available && growthRateValue > 0
                 ? "up"
-                : hasGrowthRate && growthRateValue < 0
+                : kpis.prior_period_available && growthRateValue < 0
                   ? "down"
                   : "neutral",
-            description: "vs last month",
+            description: revenueDeltaDescription,
           }}
           icon={TrendingUp}
           className="xl:col-span-2"
         />
         <KpiCard
           title="Active Dealers"
-          value={formatNumber(summary.activeDealers)}
+          value={formatNumber(kpis.active_dealers)}
           delta={{
-            value: `${summary.activeDealers} total partners`,
+            value: `${kpis.active_dealers} total partners`,
             trend: "neutral",
             description: "selling in the last 90 days",
           }}
@@ -156,19 +151,22 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         />
         <KpiCard
           title="Growth Rate"
-          value={hasGrowthRate ? formatPercent(growthRateValue) : "—"}
+          value={kpis.growth_rate == null ? "—" : formatPercentWhole(growthRateValue)}
           delta={{
-            value: hasGrowthRate
-              ? growthRateValue >= 0
-                ? "Momentum increasing"
-                : "Review pipeline health"
-              : "Not enough data",
+            value:
+              kpis.growth_rate == null
+                ? "Not enough data"
+                : growthRateValue >= 0
+                  ? "Momentum increasing"
+                  : "Review pipeline health",
             trend:
-              hasGrowthRate && growthRateValue > 0
-                ? "up"
-                : hasGrowthRate && growthRateValue < 0
-                  ? "down"
-                  : "neutral",
+              kpis.growth_rate == null
+                ? "neutral"
+                : growthRateValue > 0
+                  ? "up"
+                  : growthRateValue < 0
+                    ? "down"
+                    : "neutral",
           }}
           icon={ArrowUpRight}
         />
@@ -181,9 +179,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <CardTitle className="font-montserrat text-xl">
                 Monthly Revenue Trend
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Real-time reporting from Supabase sales data.
-              </p>
+              <p className="text-xs text-muted-foreground">Real-time reporting from Supabase sales data.</p>
             </div>
             <Badge variant="secondary" className="bg-primary/10 text-primary">
               <LineChartIcon className="mr-1 size-3" />
@@ -191,36 +187,17 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </Badge>
           </CardHeader>
           <CardContent>
-            <RevenueTrend data={trend} />
+            {hasTrend ? <RevenueTrend data={trend} /> : <DataPlaceholder />}
           </CardContent>
         </Card>
 
         <Card className="border-none bg-gradient-to-br from-background to-muted/60">
           <CardHeader>
-            <CardTitle className="font-montserrat text-xl">
-              Top Collections
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              All-time sales performance by collection.
-            </p>
+            <CardTitle className="font-montserrat text-xl">Top Products</CardTitle>
+            <p className="text-xs text-muted-foreground">Leading categories by revenue share.</p>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {topCollections.map((collection) => (
-              <div
-                key={collection.collection}
-                className="flex items-center justify-between rounded-lg border border-dashed border-primary/20 bg-primary/5 px-3 py-2"
-              >
-                <div>
-                  <p className="font-medium">{collection.collection}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(collection.revenue)} lifetime
-                  </p>
-                </div>
-                <Badge variant="outline" className="border-primary/30 text-primary">
-                  {formatPercent(collection.revenue_share)} share
-                </Badge>
-              </div>
-            ))}
+          <CardContent>
+            <TopProductsGrid products={products} />
           </CardContent>
         </Card>
       </section>
@@ -229,90 +206,100 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <Card className="border-none bg-background">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="font-montserrat text-xl">
-                Top Dealers by Revenue
-              </CardTitle>
+              <CardTitle className="font-montserrat text-xl">Top Dealers by Revenue</CardTitle>
               <p className="text-xs text-muted-foreground">
                 Year-to-date totals with latest monthly averages.
               </p>
             </div>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Dealer</TableHead>
-                  <TableHead className="text-right">Revenue YTD</TableHead>
-                  <TableHead className="text-right">Monthly Avg</TableHead>
-                  <TableHead className="text-right">Share</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topDealers.map((dealer) => (
-                  <TableRow key={dealer.customer_id}>
-                    <TableCell className="font-medium">
-                      {dealer.dealer_name}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(dealer.revenue)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {dealer.latest_month_avg
-                        ? formatCurrency(dealer.latest_month_avg)
-                        : dealer.average_invoice
-                          ? formatCurrency(dealer.average_invoice)
-                          : "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {formatPercent(dealer.revenue_share)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            {dealerRows.length ? (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Dealer</TableHead>
+                      <TableHead>Rep</TableHead>
+                      <TableHead className="text-right">Revenue YTD</TableHead>
+                      <TableHead className="text-right">Monthly Avg</TableHead>
+                      <TableHead className="text-right">Share %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dealerRows.map((dealer) => (
+                      <TableRow key={dealer.rank}>
+                        <TableCell className="text-muted-foreground">#{dealer.rank}</TableCell>
+                        <TableCell className="font-medium">{dealer.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.rep}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(dealer.revenue)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatCurrency(dealer.monthly)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatPercentWhole(dealer.share)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <p className="mt-2 text-right text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Scroll →
+                </p>
+              </>
+            ) : (
+              <DataPlaceholder />
+            )}
           </CardContent>
         </Card>
 
         <Card className="border-none bg-background">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="font-montserrat text-xl">
-                Top Sales Reps by Revenue
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Ranked by cumulative invoice totals.
-              </p>
+              <CardTitle className="font-montserrat text-xl">Top Sales Reps by Revenue</CardTitle>
+              <p className="text-xs text-muted-foreground">Ranked by YTD performance.</p>
             </div>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Rank</TableHead>
-                  <TableHead>Sales Rep</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Invoices</TableHead>
-                  <TableHead className="text-right">Active Customers</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topReps.map((rep, index) => (
-                  <TableRow key={rep.rep_id}>
-                    <TableCell className="font-medium">#{index + 1}</TableCell>
-                    <TableCell>{rep.rep_name}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(rep.revenue)}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {formatNumber(rep.invoices)}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {formatNumber(rep.customer_count)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            {repRows.length ? (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Rep</TableHead>
+                      <TableHead className="text-right">Revenue YTD</TableHead>
+                      <TableHead className="text-right">Monthly Avg</TableHead>
+                      <TableHead className="text-right">Active</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right">Active %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {repRows.map((rep) => (
+                      <TableRow key={rep.rank}>
+                        <TableCell className="text-muted-foreground">#{rep.rank}</TableCell>
+                        <TableCell className="font-medium">{rep.name}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(rep.revenue)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatCurrency(rep.monthly)}
+                        </TableCell>
+                        <TableCell className="text-right">{formatNumber(rep.active)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatNumber(rep.total)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatPercentWhole(rep.activePct)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <p className="mt-2 text-right text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Scroll →
+                </p>
+              </>
+            ) : (
+              <DataPlaceholder />
+            )}
           </CardContent>
         </Card>
       </section>

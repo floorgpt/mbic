@@ -50,7 +50,7 @@ function parseNumeric(value: unknown): number {
 
 async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.rpc<T>(fn, params);
+  const { data, error } = await supabase.rpc(fn as never, params as never);
   if (error) {
     throw error;
   }
@@ -59,13 +59,12 @@ async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<
 
 export async function getRepKpis(repId: number, range: DateRange): Promise<RepKpisRow> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .rpc<RepKpisRow>("sales_rep_kpis", {
-      p_rep_id: repId,
-      p_from: range.from,
-      p_to: range.to,
-    })
-    .single();
+  const rpcCall = supabase.rpc("sales_rep_kpis" as never, {
+    p_rep_id: repId,
+    p_from: range.from,
+    p_to: range.to,
+  } as never);
+  const { data, error } = await rpcCall.single<RepKpisRow>();
 
   if (error && error.code !== "PGRST116") {
     throw error;
