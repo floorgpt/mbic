@@ -1,11 +1,12 @@
-'use server';
+"use server";
+
+import "server-only";
 
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
-export type DateRange = { from: string; to: string };
+export type DateISO = string;
 
 type NumericLike = number | string | null;
-type BooleanLike = boolean | string | number | null;
 
 function asNumber(value: NumericLike, fallback = 0): number {
   if (value == null) return fallback;
@@ -14,102 +15,111 @@ function asNumber(value: NumericLike, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function asBoolean(value: BooleanLike, fallback = false): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value === "string") {
-    return ["true", "1", "t", "yes"].includes(value.toLowerCase());
+function normalizeCollectionName(value: unknown): string {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
   }
-  return fallback;
+  return "Uncategorized";
 }
 
-async function callRpc<T>(name: string, params: Record<string, unknown>) {
+
+function logRpc(fn: string, params: Record<string, unknown>, error?: unknown) {
+  console.error(
+    JSON.stringify({
+      at: "mbic-supabase",
+      fn,
+      params,
+      ok: !error,
+      error: error ? String((error as Error)?.message ?? error) : null,
+    }),
+  );
+}
+
+async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.rpc(name as never, params as never);
-  if (error) {
-    throw error;
+  try {
+    const { data, error } = await supabase.rpc(fn as never, params as never);
+    logRpc(fn, params, error);
+    if (error) {
+      throw new Error(`${fn} failed: ${error.message}`);
+    }
+    if (!data) {
+      throw new Error(`${fn} returned no data`);
+    }
+    return data as T;
+  } catch (err) {
+    logRpc(fn, params, err);
+    throw err;
   }
-  return (data as T) ?? null;
 }
 
 export type OrgKpis = {
-  revenue_ytd: number;
-  active_dealers: number;
-  growth_rate: number | null;
-  prior_period_available: boolean;
+  revenue: number;
+  unique_dealers: number;
+  avg_invoice: number;
+  top_dealer: string | null;
+  top_dealer_revenue: number;
 };
 
-export async function getOrgKpis({ from, to }: DateRange): Promise<OrgKpis> {
-  const rows = (await callRpc<Array<Record<string, NumericLike | BooleanLike>>>(
+export async function getOrgKpis(from: DateISO, to: DateISO): Promise<OrgKpis> {
+  const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_org_kpis_v2",
-    {
-      from_date: from,
-      to_date: to,
-    },
-  )) ?? [];
+    { from_date: from, to_date: to },
+  );
 
-  const row = rows[0] ?? {};
+  const row = rows?.[0] ?? {};
   return {
-    revenue_ytd: asNumber(row.revenue_ytd, 0),
-    active_dealers: asNumber(row.active_dealers, 0),
-    growth_rate: row.growth_rate == null ? null : asNumber(row.growth_rate, 0),
-    prior_period_available: asBoolean(row.prior_period_available, false),
+    revenue: asNumber(row.revenue ?? row.revenue_ytd, 0),
+    unique_dealers: asNumber(row.unique_dealers ?? row.active_dealers, 0),
+    avg_invoice: asNumber(row.avg_invoice, 0),
+    top_dealer: typeof row.top_dealer === "string" ? row.top_dealer : null,
+    top_dealer_revenue: asNumber(row.top_dealer_revenue, 0),
   };
 }
 
 export type MonthlyPoint = { month: string; total: number };
 
-export async function getOrgMonthly({ from, to }: DateRange): Promise<MonthlyPoint[]> {
-  const rows = (await callRpc<Array<Record<string, NumericLike | string>>>(
+export async function getOrgMonthly(from: DateISO, to: DateISO): Promise<MonthlyPoint[]> {
+  const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_org_monthly_v2",
-    {
-      from_date: from,
-      to_date: to,
-    },
-  )) ?? [];
+    { from_date: from, to_date: to },
+  );
 
+  if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
-    month: typeof row.month_label === "string" ? row.month_label : "",
+    month: typeof row.month === "string" ? row.month : (row.month_label as string) ?? "",
     total: asNumber(row.month_total, 0),
   }));
 }
 
 export type DealerRow = {
-  customer_id: number;
   dealer_name: string;
-  revenue_ytd: number;
+  revenue: number;
   monthly_avg: number;
-  invoices: number;
-  share_pct?: number;
+  share_pct: number | null;
   rep_initials: string | null;
 };
 
-export async function getTopDealers({
-  from,
-  to,
+export async function getTopDealers(
+  from: DateISO,
+  to: DateISO,
   limit = 10,
   offset = 0,
-}: DateRange & { limit?: number; offset?: number }): Promise<DealerRow[]> {
-  const rows = (await callRpc<Array<Record<string, NumericLike | string>>>(
+): Promise<DealerRow[]> {
+  const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_org_top_dealers",
-    {
-      from_date: from,
-      to_date: to,
-      limit,
-      offset,
-    },
-  )) ?? [];
+    { from_date: from, to_date: to, limit, offset },
+  );
 
+  if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
-    customer_id: asNumber(row.customer_id, 0),
     dealer_name:
       typeof row.dealer_name === "string" && row.dealer_name.trim().length > 0
         ? row.dealer_name
-        : `Dealer ${asNumber(row.customer_id, 0)}`,
-    revenue_ytd: asNumber(row.revenue_ytd, 0),
+        : "—",
+    revenue: asNumber(row.revenue ?? row.revenue_ytd, 0),
     monthly_avg: asNumber(row.monthly_avg, 0),
-    invoices: asNumber(row.invoices, 0),
-    share_pct: asNumber(row.share_pct, 0),
+    share_pct: row.share_pct == null ? null : asNumber(row.share_pct, 0),
     rep_initials:
       typeof row.rep_initials === "string" && row.rep_initials.trim().length > 0
         ? row.rep_initials
@@ -120,37 +130,31 @@ export async function getTopDealers({
 export type RepRow = {
   rep_id: number;
   rep_name: string;
-  revenue_ytd: number;
+  revenue: number;
   monthly_avg: number;
-  invoices: number;
   active_customers: number;
   total_customers: number;
   active_pct: number | null;
 };
 
-export async function getTopReps({
-  from,
-  to,
+export async function getTopReps(
+  from: DateISO,
+  to: DateISO,
   limit = 10,
   offset = 0,
-}: DateRange & { limit?: number; offset?: number }): Promise<RepRow[]> {
-  const rows = (await callRpc<Array<Record<string, NumericLike | string>>>(
+): Promise<RepRow[]> {
+  const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_org_top_reps",
-    {
-      from_date: from,
-      to_date: to,
-      limit,
-      offset,
-    },
-  )) ?? [];
+    { from_date: from, to_date: to, limit, offset },
+  );
 
+  if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
     rep_id: asNumber(row.rep_id, 0),
-    rep_name: typeof row.rep_name === "string" ? row.rep_name : `Rep ${asNumber(row.rep_id, 0)}`,
-    revenue_ytd: asNumber(row.revenue ?? row.revenue_ytd, 0),
+    rep_name: typeof row.rep_name === "string" ? row.rep_name : "Rep",
+    revenue: asNumber(row.revenue ?? row.revenue_ytd, 0),
     monthly_avg: asNumber(row.monthly_avg, 0),
-    invoices: asNumber(row.invoices, 0),
-    active_customers: asNumber(row.active_customers ?? row.active_dealers, 0),
+    active_customers: asNumber(row.active_customers, 0),
     total_customers: asNumber(row.total_customers, 0),
     active_pct: row.active_pct == null ? null : asNumber(row.active_pct, 0),
   }));
@@ -164,43 +168,42 @@ export type CategoryRow = {
   share_pct: number;
 };
 
-export async function getCategoryTotals({ from, to }: DateRange): Promise<CategoryRow[]> {
-  const rows = (await callRpc<Array<Record<string, NumericLike | string>>>(
+export async function getCategoryTotals(from: DateISO, to: DateISO): Promise<CategoryRow[]> {
+  const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_category_totals",
-    {
-      from_date: from,
-      to_date: to,
-    },
-  )) ?? [];
+    { from_date: from, to_date: to },
+  );
 
+  if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
     category_key: typeof row.category_key === "string" ? row.category_key : "uncategorized",
     display_name: normalizeCollectionName(row.display_name ?? row.category_key),
     icon_url: typeof row.icon_url === "string" ? row.icon_url : null,
-    total_sales: asNumber(row.total_sales ?? row.revenue, 0),
+    total_sales: asNumber(row.total_sales, 0),
     share_pct: asNumber(row.share_pct, 0),
   }));
 }
 
 export type DealerEngagementRow = {
+  month: string;
   active_cnt: number;
+  inactive_cnt: number;
   total_assigned: number;
   active_pct: number;
 };
 
-export async function getDealerEngagement({ from, to }: DateRange): Promise<DealerEngagementRow> {
-  const rows = (await callRpc<Array<Record<string, NumericLike>>>(
+export async function getDealerEngagement(from: DateISO, to: DateISO): Promise<DealerEngagementRow[]> {
+  const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_org_dealer_engagement_trailing_v3",
-    {
-      from_date: from,
-      to_date: to,
-    },
-  )) ?? [];
+    { from_date: from, to_date: to },
+  );
 
-  const row = rows[0] ?? {};
-  return {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => ({
+    month: typeof row.month === "string" ? row.month : "",
     active_cnt: asNumber(row.active_cnt, 0),
+    inactive_cnt: asNumber(row.inactive_cnt, 0),
     total_assigned: asNumber(row.total_assigned, 0),
     active_pct: asNumber(row.active_pct, 0),
-  };
+  }));
 }

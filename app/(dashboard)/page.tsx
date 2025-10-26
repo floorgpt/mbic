@@ -31,7 +31,7 @@ import {
   type DealerRow,
   type RepRow,
 } from "@/lib/mbic-supabase";
-import { fmtCompact, fmtPct0, fmtUSD0 } from "@/lib/format";
+import { fmtPct0, fmtUSD0 } from "@/lib/format";
 import { formatNumber } from "@/lib/utils/format";
 
 export const revalidate = 60;
@@ -40,6 +40,10 @@ const DEFAULT_FROM = "2025-01-01";
 const DEFAULT_TO = "2025-10-01";
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
+
+type DashboardPageProps = {
+  searchParams?: Promise<DashboardSearchParams>;
+};
 
 function normalizeParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) {
@@ -66,7 +70,7 @@ function DataPlaceholder({ message = "No data for this period." }: { message?: s
 }
 
 function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
-  if (categories.length === 0) {
+  if (!categories.length) {
     return <DataPlaceholder />;
   }
 
@@ -104,38 +108,82 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
   );
 }
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams?: Promise<DashboardSearchParams>;
-}) {
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = await (searchParams ?? Promise.resolve({} as DashboardSearchParams));
-
   const from = resolveDateParam(normalizeParam(params.from), DEFAULT_FROM);
   const to = resolveDateParam(normalizeParam(params.to), DEFAULT_TO);
 
-  const [kpis, monthly, categories, dealers, reps, engagement] = await Promise.all([
-    getOrgKpis({ from, to }),
-    getOrgMonthly({ from, to }),
-    getCategoryTotals({ from, to }),
-    getTopDealers({ from, to }),
-    getTopReps({ from, to }),
-    getDealerEngagement({ from, to }),
-  ]);
+  let kpisData: Awaited<ReturnType<typeof getOrgKpis>> | null = null;
+  let monthlyData: Awaited<ReturnType<typeof getOrgMonthly>> = [];
+  let dealerData: DealerRow[] = [];
+  let repData: RepRow[] = [];
+  let categoryData: CategoryRow[] = [];
+  let engagementData = [] as Awaited<ReturnType<typeof getDealerEngagement>>;
 
-  const totalRevenue = kpis?.revenue_ytd ?? 0;
-  const monthlyPoints = monthly ?? [];
-  const categoryRows = [...(categories ?? [])].sort((a, b) => b.total_sales - a.total_sales);
-  const dealerRows: DealerRow[] = dealers ?? [];
-  const repRows: RepRow[] = reps ?? [];
-  const engagementRow = engagement ?? { active_cnt: 0, total_assigned: 0, active_pct: 0 };
+  try {
+    [kpisData, monthlyData, dealerData, repData, categoryData, engagementData] = await Promise.all([
+      getOrgKpis(from, to),
+      getOrgMonthly(from, to),
+      getTopDealers(from, to, 10, 0),
+      getTopReps(from, to, 10, 0),
+      getCategoryTotals(from, to),
+      getDealerEngagement(from, to),
+    ]);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        at: "dashboard/page",
+        from,
+        to,
+        error: (error as Error)?.message ?? String(error),
+      }),
+    );
+  }
 
-  const trend = monthlyPoints.map((point) => ({
+  const kpis = kpisData ?? {
+    revenue: 0,
+    unique_dealers: 0,
+    avg_invoice: 0,
+    top_dealer: null,
+    top_dealer_revenue: 0,
+  };
+
+  const latestEngagement = engagementData.at(-1) ?? {
+    active_cnt: 0,
+    inactive_cnt: 0,
+    total_assigned: 0,
+    active_pct: 0,
+  };
+
+  const dealerRows = (dealerData ?? []).map((dealer, index) => {
+    const revenue = dealer.revenue ?? 0;
+    const share = dealer.share_pct ?? (kpis.revenue ? (revenue / kpis.revenue) * 100 : 0);
+    return {
+      rank: index + 1,
+      name: dealer.dealer_name,
+      revenue,
+      monthly: dealer.monthly_avg ?? 0,
+      share,
+      rep: dealer.rep_initials ?? "—",
+    };
+  });
+
+  const repRows = (repData ?? []).map((rep, index) => ({
+    rank: index + 1,
+    name: rep.rep_name,
+    revenue: rep.revenue ?? 0,
+    monthly: rep.monthly_avg ?? 0,
+    active: rep.active_customers ?? 0,
+    total: rep.total_customers ?? 0,
+    activePct: rep.active_pct,
+  }));
+
+  const monthlyPoints = (monthlyData ?? []).map((point) => ({
     month: point.month,
     total_sales: point.total,
   }));
 
-  const revenueDeltaDescription = "No Year-over-Year delta • data available from 2025-01-01 to 2025-09-30";
+  const categories = categoryData ?? [];
 
   return (
     <div className="space-y-8">
@@ -147,39 +195,31 @@ export default async function DashboardPage({
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Revenue YTD"
-          value={fmtCompact(totalRevenue)}
-          delta={{ value: "—", trend: "neutral", description: revenueDeltaDescription }}
+          value={fmtUSD0(kpis.revenue)}
+          delta={{
+            value: "—",
+            trend: "neutral",
+            description: "No Year-over-Year delta • data available from 2025-01-01 to 2025-09-30",
+          }}
           icon={TrendingUp}
           className="xl:col-span-2"
         />
         <KpiCard
           title="Active Dealers"
-          value={formatNumber(engagementRow.active_cnt)}
+          value={formatNumber(latestEngagement.active_cnt)}
           delta={{
-            value: `${formatNumber(engagementRow.total_assigned)} total`,
+            value: `${formatNumber(latestEngagement.total_assigned)} total assigned`,
             trend: "neutral",
-            description: `${fmtPct0(engagementRow.active_pct)} active`,
+            description: `${fmtPct0(latestEngagement.active_pct)} active`,
           }}
           icon={Users}
         />
         <KpiCard
           title="Growth Rate"
-          value={kpis?.growth_rate == null ? "—" : fmtPct0(kpis.growth_rate)}
+          value={"—"}
           delta={{
-            value:
-              kpis?.growth_rate == null
-                ? "Not enough data"
-                : kpis.growth_rate >= 0
-                  ? "Momentum increasing"
-                  : "Review pipeline health",
-            trend:
-              kpis?.growth_rate == null
-                ? "neutral"
-                : kpis.growth_rate > 0
-                  ? "up"
-                  : kpis.growth_rate < 0
-                    ? "down"
-                    : "neutral",
+            value: "Not enough data",
+            trend: "neutral",
           }}
           icon={ArrowUpRight}
         />
@@ -198,7 +238,7 @@ export default async function DashboardPage({
             </Badge>
           </CardHeader>
           <CardContent>
-            {trend.length ? <RevenueTrend data={trend} /> : <DataPlaceholder />}
+            {monthlyPoints.length ? <RevenueTrend data={monthlyPoints} /> : <DataPlaceholder />}
           </CardContent>
         </Card>
 
@@ -208,7 +248,7 @@ export default async function DashboardPage({
             <p className="text-xs text-muted-foreground">Leading categories by revenue share.</p>
           </CardHeader>
           <CardContent>
-            <TopProductsGrid products={categoryRows} />
+            <TopProductsGrid products={categories} />
           </CardContent>
         </Card>
       </section>
@@ -219,7 +259,7 @@ export default async function DashboardPage({
           <p className="text-xs text-muted-foreground">Every active segment this period.</p>
         </CardHeader>
         <CardContent>
-          <CategoryCarousel categories={categoryRows} />
+          <CategoryCarousel categories={categories} />
         </CardContent>
       </Card>
 
@@ -246,14 +286,16 @@ export default async function DashboardPage({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dealerRows.map((dealer, index) => (
-                      <TableRow key={`${dealer.customer_id}-${index}`}>
-                        <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
-                        <TableCell className="font-medium">{dealer.dealer_name}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.rep_initials ?? "—"}</TableCell>
-                        <TableCell className="text-right">{fmtUSD0(dealer.revenue_ytd)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(dealer.monthly_avg)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{fmtPct0(dealer.share_pct ?? 0)}</TableCell>
+                    {dealerRows.map((dealer) => (
+                      <TableRow key={`${dealer.rank}-${dealer.name}`}>
+                        <TableCell className="text-muted-foreground">#{dealer.rank}</TableCell>
+                        <TableCell className="font-medium">{dealer.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.rep}</TableCell>
+                        <TableCell className="text-right">{fmtUSD0(dealer.revenue)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(dealer.monthly)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {dealer.share == null ? "—" : fmtPct0(dealer.share)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -289,16 +331,16 @@ export default async function DashboardPage({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {repRows.map((rep, index) => (
-                      <TableRow key={`${rep.rep_id}-${index}`}>
-                        <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
-                        <TableCell className="font-medium">{rep.rep_name}</TableCell>
-                        <TableCell className="text-right">{fmtUSD0(rep.revenue_ytd)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(rep.monthly_avg)}</TableCell>
-                        <TableCell className="text-right">{formatNumber(rep.active_customers)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{formatNumber(rep.total_customers)}</TableCell>
+                    {repRows.map((rep) => (
+                      <TableRow key={`${rep.rank}-${rep.name}`}>
+                        <TableCell className="text-muted-foreground">#{rep.rank}</TableCell>
+                        <TableCell className="font-medium">{rep.name}</TableCell>
+                        <TableCell className="text-right">{fmtUSD0(rep.revenue)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(rep.monthly)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(rep.active)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatNumber(rep.total)}</TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          {rep.active_pct == null ? "—" : fmtPct0(rep.active_pct)}
+                          {rep.activePct == null ? "—" : fmtPct0(rep.activePct)}
                         </TableCell>
                       </TableRow>
                     ))}
