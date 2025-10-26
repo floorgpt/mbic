@@ -4,11 +4,11 @@ import Image from "next/image";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import type { OrgProduct } from "@/lib/mbic-dashboard";
-import { formatCurrency, formatPercentWhole } from "@/lib/utils/format";
+import type { CategoryRow } from "@/lib/mbic-supabase";
+import { fmtPct0, fmtUSD0 } from "@/lib/format";
 
 type TopProductsGridProps = {
-  products: OrgProduct[];
+  products: CategoryRow[];
   pageSize?: number;
 };
 
@@ -61,7 +61,7 @@ export function TopProductsGrid({ products, pageSize = 6 }: TopProductsGridProps
               <div className="flex flex-col">
                 <span className="font-semibold">{product.display_name}</span>
                 <span className="text-xs text-muted-foreground">
-                  {formatCurrency(product.total_sales)} • {formatPercentWhole(product.share_pct)}
+                  {fmtUSD0(product.total_sales)} • {fmtPct0(product.share_pct)}
                 </span>
               </div>
             </div>
