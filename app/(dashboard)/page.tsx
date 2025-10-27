@@ -6,8 +6,9 @@ import {
   Users,
 } from "lucide-react";
 
+import { DealerHeatmap } from "@/components/dashboard/dealer-heatmap";
+import { MonthlyRevenueTrend } from "@/components/dashboard/monthly-revenue-trend";
 import { TopProductsGrid } from "@/components/dashboard/top-products-grid";
-import { RevenueTrend } from "@/components/charts/revenue-trend";
 import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ import {
   getTopReps,
   type CategoryRow,
   type DealerRow,
+  type DealerEngagementRow,
   type RepRow,
 } from "@/lib/mbic-supabase";
 import { fmtPct0, fmtUSD0 } from "@/lib/format";
@@ -38,6 +40,7 @@ export const revalidate = 60;
 
 const DEFAULT_FROM = "2025-01-01";
 const DEFAULT_TO = "2025-10-01";
+const TOP_PRODUCTS_PAGE_SIZE = 6;
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
 
@@ -52,7 +55,7 @@ function normalizeParam(value: string | string[] | undefined): string | undefine
   return value;
 }
 
-function resolveDateParam(value: string | undefined, fallback: string): string {
+function resolveDate(value: string | undefined, fallback: string): string {
   if (!value) return fallback;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -61,13 +64,30 @@ function resolveDateParam(value: string | undefined, fallback: string): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+function buildHref(params: DashboardSearchParams, targetPage: number) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (!value || key === "topProductsPage") return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => query.append(key, entry));
+    } else {
+      query.set(key, value);
+    }
+  });
+  query.set("topProductsPage", String(targetPage));
+  return `?${query.toString()}`;
+}
+
 function DataPlaceholder({ message = "No data for this period." }: { message?: string }) {
   return (
-    <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-muted bg-muted/40 p-6 text-sm text-muted-foreground">
+    <div className="flex min-h-[140px] items-center justify-center rounded-2xl border border-dashed border-muted bg-muted/40 p-6 text-sm text-muted-foreground">
       {message}
     </div>
   );
 }
+
+const FALLBACK_ICON =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%23F4F4F5'/%3E%3Cpath d='M40 78l16-20 18 14 14-18' stroke='%239999A1' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
 
 function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
   if (!categories.length) {
@@ -82,19 +102,17 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
           className="flex min-w-[220px] items-center gap-3 rounded-2xl border bg-background/80 p-4 shadow-sm"
         >
           <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted/60">
-            {category.icon_url ? (
-              <Image
-                src={category.icon_url}
-                alt={category.display_name}
-                width={64}
-                height={64}
-                className="size-full object-cover"
-              />
-            ) : (
-              <div className="flex size-full items-center justify-center text-sm font-semibold text-muted-foreground">
-                {category.display_name.slice(0, 2).toUpperCase()}
-              </div>
-            )}
+            <Image
+              src={category.icon_url ?? FALLBACK_ICON}
+              alt={category.display_name}
+              width={64}
+              height={64}
+              className="size-full object-contain"
+              onError={(event) => {
+                event.currentTarget.src = FALLBACK_ICON;
+              }}
+              unoptimized
+            />
           </div>
           <div>
             <p className="font-medium">{category.display_name}</p>
@@ -110,18 +128,17 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = await (searchParams ?? Promise.resolve({} as DashboardSearchParams));
-  const from = resolveDateParam(normalizeParam(params.from), DEFAULT_FROM);
-  const to = resolveDateParam(normalizeParam(params.to), DEFAULT_TO);
+  const from = resolveDate(normalizeParam(params.from), DEFAULT_FROM);
+  const to = resolveDate(normalizeParam(params.to), DEFAULT_TO);
 
-  let kpisData: Awaited<ReturnType<typeof getOrgKpis>> | null = null;
-  let monthlyData: Awaited<ReturnType<typeof getOrgMonthly>> = [];
+  let kpis: Awaited<ReturnType<typeof getOrgKpis>> | null = null;
+  let monthly: Awaited<ReturnType<typeof getOrgMonthly>> = [];
   let dealerData: DealerRow[] = [];
   let repData: RepRow[] = [];
   let categoryData: CategoryRow[] = [];
-  let engagementData = [] as Awaited<ReturnType<typeof getDealerEngagement>>;
-
+  let engagementData: DealerEngagementRow[] = [];
   try {
-    [kpisData, monthlyData, dealerData, repData, categoryData, engagementData] = await Promise.all([
+    [kpis, monthly, dealerData, repData, categoryData, engagementData] = await Promise.all([
       getOrgKpis(from, to),
       getOrgMonthly(from, to),
       getTopDealers(from, to, 10, 0),
@@ -140,50 +157,22 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     );
   }
 
-  const kpis = kpisData ?? {
-    revenue: 0,
-    unique_dealers: 0,
-    avg_invoice: 0,
-    top_dealer: null,
-    top_dealer_revenue: 0,
-  };
-
-  const latestEngagement = engagementData.at(-1) ?? {
+  const totalRevenue = kpis?.revenue ?? 0;
+  const latestEngagement = engagementData?.at(-1) ?? {
     active_cnt: 0,
     inactive_cnt: 0,
     total_assigned: 0,
     active_pct: 0,
   };
 
-  const dealerRows = (dealerData ?? []).map((dealer, index) => {
-    const revenue = dealer.revenue ?? 0;
-    const share = dealer.share_pct ?? (kpis.revenue ? (revenue / kpis.revenue) * 100 : 0);
-    return {
-      rank: index + 1,
-      name: dealer.dealer_name,
-      revenue,
-      monthly: dealer.monthly_avg ?? 0,
-      share,
-      rep: dealer.rep_initials ?? "—",
-    };
-  });
-
-  const repRows = (repData ?? []).map((rep, index) => ({
-    rank: index + 1,
-    name: rep.rep_name,
-    revenue: rep.revenue ?? 0,
-    monthly: rep.monthly_avg ?? 0,
-    active: rep.active_customers ?? 0,
-    total: rep.total_customers ?? 0,
-    activePct: rep.active_pct,
-  }));
-
-  const monthlyPoints = (monthlyData ?? []).map((point) => ({
-    month: point.month,
-    total_sales: point.total,
-  }));
-
-  const categories = categoryData ?? [];
+  const sortedCategories = [...(categoryData ?? [])].sort((a, b) => b.total_sales - a.total_sales);
+  const dealerRows = dealerData ?? [];
+  const repRows = repData ?? [];
+  const topProductsTotalPages = Math.max(1, Math.ceil(sortedCategories.length / TOP_PRODUCTS_PAGE_SIZE));
+  const topProductsPageParam = parseInt(normalizeParam(params.topProductsPage) ?? "1", 10);
+  const currentTopProductsPage = Number.isNaN(topProductsPageParam)
+    ? 1
+    : Math.min(Math.max(topProductsPageParam, 1), topProductsTotalPages);
 
   return (
     <div className="space-y-8">
@@ -195,7 +184,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title="Revenue YTD"
-          value={fmtUSD0(kpis.revenue)}
+          value={fmtUSD0(totalRevenue)}
           delta={{
             value: "—",
             trend: "neutral",
@@ -216,16 +205,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         />
         <KpiCard
           title="Growth Rate"
-          value={"—"}
-          delta={{
-            value: "Not enough data",
-            trend: "neutral",
-          }}
+          value="—"
+          delta={{ value: "Not enough data", trend: "neutral" }}
           icon={ArrowUpRight}
         />
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-3">
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 border-none bg-gradient-to-br from-background to-muted/60">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -238,7 +224,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </Badge>
           </CardHeader>
           <CardContent>
-            {monthlyPoints.length ? <RevenueTrend data={monthlyPoints} /> : <DataPlaceholder />}
+            <MonthlyRevenueTrend data={(monthly ?? []).map((point) => ({ month: point.month, total: point.total }))} />
           </CardContent>
         </Card>
 
@@ -248,7 +234,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <p className="text-xs text-muted-foreground">Leading categories by revenue share.</p>
           </CardHeader>
           <CardContent>
-            <TopProductsGrid products={categories} />
+            <TopProductsGrid
+              products={sortedCategories}
+              currentPage={currentTopProductsPage}
+              pageSize={TOP_PRODUCTS_PAGE_SIZE}
+              buildPageHref={(page) => buildHref(params, page)}
+            />
           </CardContent>
         </Card>
       </section>
@@ -259,7 +250,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <p className="text-xs text-muted-foreground">Every active segment this period.</p>
         </CardHeader>
         <CardContent>
-          <CategoryCarousel categories={categories} />
+          <CategoryCarousel categories={sortedCategories} />
         </CardContent>
       </Card>
 
@@ -286,18 +277,20 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dealerRows.map((dealer) => (
-                      <TableRow key={`${dealer.rank}-${dealer.name}`}>
-                        <TableCell className="text-muted-foreground">#{dealer.rank}</TableCell>
-                        <TableCell className="font-medium">{dealer.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.rep}</TableCell>
-                        <TableCell className="text-right">{fmtUSD0(dealer.revenue)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(dealer.monthly)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {dealer.share == null ? "—" : fmtPct0(dealer.share)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {dealerRows.map((dealer, index) => {
+                      const revenue = dealer.revenue ?? 0;
+                      const share = dealer.share_pct ?? (totalRevenue ? (revenue / totalRevenue) * 100 : 0);
+                      return (
+                        <TableRow key={`${dealer.dealer_name}-${index}`}>
+                          <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
+                          <TableCell className="font-medium">{dealer.dealer_name}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.rep_initials ?? "—"}</TableCell>
+                          <TableCell className="text-right">{fmtUSD0(revenue)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{fmtUSD0(dealer.monthly_avg ?? 0)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{fmtPct0(share)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
                 <p className="mt-2 text-right text-[10px] uppercase tracking-wide text-muted-foreground">Scroll →</p>
@@ -331,16 +324,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {repRows.map((rep) => (
-                      <TableRow key={`${rep.rank}-${rep.name}`}>
-                        <TableCell className="text-muted-foreground">#{rep.rank}</TableCell>
-                        <TableCell className="font-medium">{rep.name}</TableCell>
-                        <TableCell className="text-right">{fmtUSD0(rep.revenue)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(rep.monthly)}</TableCell>
-                        <TableCell className="text-right">{formatNumber(rep.active)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{formatNumber(rep.total)}</TableCell>
+                    {repRows.map((rep, index) => (
+                      <TableRow key={`${rep.rep_id}-${index}`}>
+                        <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
+                        <TableCell className="font-medium">{rep.rep_name}</TableCell>
+                        <TableCell className="text-right">{fmtUSD0(rep.revenue ?? 0)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(rep.monthly_avg ?? 0)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(rep.active_customers ?? 0)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatNumber(rep.total_customers ?? 0)}</TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          {rep.activePct == null ? "—" : fmtPct0(rep.activePct)}
+                          {rep.active_pct == null ? "—" : fmtPct0(rep.active_pct)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -354,6 +347,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardContent>
         </Card>
       </section>
+
+      <Card className="border-none bg-background">
+        <CardHeader>
+          <CardTitle className="font-montserrat text-xl">Dealer Engagement Heatmap</CardTitle>
+          <p className="text-xs text-muted-foreground">Trailing monthly activity excluding distribution partners.</p>
+        </CardHeader>
+        <CardContent>
+          <DealerHeatmap data={engagementData ?? []} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
