@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  outputFileTracingRoot: __dirname,
   images: {
     remotePatterns: [
       {
@@ -8,6 +7,12 @@ const nextConfig = {
         hostname: "res.cloudinary.com",
       },
     ],
+  },
+  logging: {
+    fetches: {
+      fullUrl: true,
+    },
+    limit: 50,
   },
 };
 

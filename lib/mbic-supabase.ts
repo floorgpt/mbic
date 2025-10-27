@@ -3,10 +3,12 @@
 import "server-only";
 
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { tryServer } from "@/lib/utils";
 
 export type DateISO = string;
 
 type NumericLike = number | string | null;
+type RpcResponse<T> = { data: T | null; error: { message?: string } | null };
 
 function asNumber(value: NumericLike, fallback = 0): number {
   if (value == null) return fallback;
@@ -37,20 +39,27 @@ function logRpc(fn: string, params: Record<string, unknown>, error?: unknown) {
 
 async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
   const supabase = getSupabaseAdminClient();
-  try {
-    const { data, error } = await supabase.rpc(fn as never, params as never);
-    logRpc(fn, params, error);
-    if (error) {
-      throw new Error(`${fn} failed: ${error.message}`);
-    }
-    if (!data) {
-      throw new Error(`${fn} returned no data`);
-    }
-    return data as T;
-  } catch (err) {
-    logRpc(fn, params, err);
-    throw err;
+  const rpcBuilder = supabase.rpc(fn as never, params as never);
+  const rpcPromise: Promise<RpcResponse<T>> = new Promise((resolve, reject) => {
+    rpcBuilder.then(resolve, reject);
+  });
+  const [result, caught] = await tryServer(rpcPromise, fn);
+  if (caught) {
+    logRpc(fn, params, caught);
+    throw caught;
   }
+  const { data, error } = (result as RpcResponse<T>) ?? {
+    data: null,
+    error: null,
+  };
+  logRpc(fn, params, error);
+  if (error) {
+    throw new Error(`${fn} failed: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error(`${fn} returned no data`);
+  }
+  return data as T;
 }
 
 export type OrgKpis = {
@@ -88,7 +97,7 @@ export async function getOrgMonthly(from: DateISO, to: DateISO): Promise<Monthly
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
     month: typeof row.month === "string" ? row.month : (row.month_label as string) ?? "",
-    total: asNumber(row.month_total ?? row.total, 0),
+    total: asNumber(row.total ?? row.month_total ?? (row.sum as NumericLike) ?? 0, 0),
   }));
 }
 
