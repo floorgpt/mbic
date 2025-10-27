@@ -3,9 +3,7 @@ import Link from "next/link";
 
 import type { CategoryRow } from "@/lib/mbic-supabase";
 import { fmtPct0, fmtUSD0, fmtCompact } from "@/lib/format";
-
-const FALLBACK_ICON =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%23F4F4F5'/%3E%3Cpath d='M40 78l16-20 18 14 14-18' stroke='%239999A1' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+import { getIcon } from "@/lib/utils";
 
 type TopProductsGridProps = {
   products: CategoryRow[];
@@ -41,15 +39,12 @@ export function TopProductsGrid({ products, currentPage, pageSize = 6, buildPage
               <div className="text-xs font-semibold text-muted-foreground">#{rank}</div>
               <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted/60">
                 <Image
-                  src={product.icon_url ?? FALLBACK_ICON}
+                  src={getIcon(product.icon_url ?? undefined)}
                   alt={product.display_name}
                   width={64}
                   height={64}
                   className="size-full object-contain"
                   unoptimized
-                  onError={(event) => {
-                    event.currentTarget.src = FALLBACK_ICON;
-                  }}
                 />
               </div>
               <div className="flex flex-col">

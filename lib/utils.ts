@@ -14,3 +14,24 @@ export async function tryServer<T>(promise: Promise<T>, label?: string): Promise
     return [null, error as Error];
   }
 }
+
+export function getIcon(src?: string): string {
+  if (!src || typeof src !== "string" || !src.trim()) {
+    return "/icons/fallback.svg";
+  }
+  return src;
+}
+
+export type SafeResult<T> = { data: T; error: Error | null };
+
+export async function tryServerSafe<T>(
+  promise: Promise<T>,
+  label: string,
+  fallback: T,
+): Promise<SafeResult<T>> {
+  const [data, error] = await tryServer(promise, label);
+  if (error) {
+    return { data: fallback, error };
+  }
+  return { data: data as T, error: null };
+}

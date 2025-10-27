@@ -22,19 +22,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  getCategoryTotals,
-  getDealerEngagement,
-  getOrgKpis,
-  getOrgMonthly,
-  getTopDealers,
-  getTopReps,
+  getCategoryTotalsSafe,
+  getDealerEngagementSafe,
+  getOrgKpisSafe,
+  getOrgMonthlySafe,
+  getTopDealersSafe,
+  getTopRepsSafe,
   type CategoryRow,
   type DealerRow,
   type DealerEngagementRow,
   type RepRow,
+  type OrgKpis,
+  type MonthlyPoint,
 } from "@/lib/mbic-supabase";
 import { fmtPct0, fmtUSD0 } from "@/lib/format";
 import { formatNumber } from "@/lib/utils/format";
+import { getIcon, type SafeResult } from "@/lib/utils";
 
 export const revalidate = 60;
 
@@ -86,9 +89,6 @@ function DataPlaceholder({ message = "No data for this period." }: { message?: s
   );
 }
 
-const FALLBACK_ICON =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%23F4F4F5'/%3E%3Cpath d='M40 78l16-20 18 14 14-18' stroke='%239999A1' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
-
 function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
   if (!categories.length) {
     return <DataPlaceholder />;
@@ -103,14 +103,11 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
         >
           <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted/60">
             <Image
-              src={category.icon_url ?? FALLBACK_ICON}
+              src={getIcon(category.icon_url ?? undefined)}
               alt={category.display_name}
               width={64}
               height={64}
               className="size-full object-contain"
-              onError={(event) => {
-                event.currentTarget.src = FALLBACK_ICON;
-              }}
               unoptimized
             />
           </div>
@@ -131,43 +128,60 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const from = resolveDate(normalizeParam(params.from), DEFAULT_FROM);
   const to = resolveDate(normalizeParam(params.to), DEFAULT_TO);
 
-  let kpis: Awaited<ReturnType<typeof getOrgKpis>> | null = null;
-  let monthly: Awaited<ReturnType<typeof getOrgMonthly>> = [];
-  let dealerData: DealerRow[] = [];
-  let repData: RepRow[] = [];
-  let categoryData: CategoryRow[] = [];
-  let engagementData: DealerEngagementRow[] = [];
-  try {
-    [kpis, monthly, dealerData, repData, categoryData, engagementData] = await Promise.all([
-      getOrgKpis(from, to),
-      getOrgMonthly(from, to),
-      getTopDealers(from, to, 10, 0),
-      getTopReps(from, to, 10, 0),
-      getCategoryTotals(from, to),
-      getDealerEngagement(from, to),
-    ]);
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        at: "dashboard/page",
-        from,
-        to,
-        error: (error as Error)?.message ?? String(error),
-      }),
-    );
-  }
+  const [kpisRes, monthlyRes, dealersRes, repsRes, categoriesRes, engagementRes] = await Promise.allSettled([
+    getOrgKpisSafe(from, to),
+    getOrgMonthlySafe(from, to),
+    getTopDealersSafe(from, to, 10, 0),
+    getTopRepsSafe(from, to, 10, 0),
+    getCategoryTotalsSafe(from, to),
+    getDealerEngagementSafe(from, to),
+  ]);
 
-  const totalRevenue = kpis?.revenue ?? 0;
-  const latestEngagement = engagementData?.at(-1) ?? {
+  const extract = <T,>(
+    result: PromiseSettledResult<SafeResult<T>>,
+    fallback: T,
+    label: string,
+  ): T => {
+    if (result.status === "fulfilled") {
+      if (result.value?.error) {
+        console.error(`Dashboard panel error (${label}):`, result.value.error);
+      }
+      return result.value?.data ?? fallback;
+    }
+    console.error(`Dashboard panel rejected (${label}):`, result.reason);
+    return fallback;
+  };
+
+  const kpis = extract(
+    kpisRes as PromiseSettledResult<SafeResult<OrgKpis>>,
+    {
+      revenue: 0,
+      unique_dealers: 0,
+      avg_invoice: 0,
+      top_dealer: null,
+      top_dealer_revenue: 0,
+    },
+    "kpis",
+  );
+  const monthly = extract(monthlyRes as PromiseSettledResult<SafeResult<MonthlyPoint[]>>, [], "monthly");
+  const dealerRows = extract(dealersRes as PromiseSettledResult<SafeResult<DealerRow[]>>, [], "dealers");
+  const repRows = extract(repsRes as PromiseSettledResult<SafeResult<RepRow[]>>, [], "reps");
+  const categoryData = extract(categoriesRes as PromiseSettledResult<SafeResult<CategoryRow[]>>, [], "categories");
+  const engagementData = extract(
+    engagementRes as PromiseSettledResult<SafeResult<DealerEngagementRow[]>>,
+    [],
+    "engagement",
+  );
+
+  const totalRevenue = kpis.revenue ?? 0;
+  const latestEngagement = engagementData.at(-1) ?? {
     active_cnt: 0,
     inactive_cnt: 0,
     total_assigned: 0,
     active_pct: 0,
   };
 
-  const sortedCategories = [...(categoryData ?? [])].sort((a, b) => b.total_sales - a.total_sales);
-  const dealerRows = dealerData ?? [];
-  const repRows = repData ?? [];
+  const sortedCategories = [...categoryData].sort((a, b) => b.total_sales - a.total_sales);
   const topProductsTotalPages = Math.max(1, Math.ceil(sortedCategories.length / TOP_PRODUCTS_PAGE_SIZE));
   const topProductsPageParam = parseInt(normalizeParam(params.topProductsPage) ?? "1", 10);
   const currentTopProductsPage = Number.isNaN(topProductsPageParam)
@@ -224,7 +238,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </Badge>
           </CardHeader>
           <CardContent>
-            <MonthlyRevenueTrend data={(monthly ?? []).map((point) => ({ month: point.month, total: point.total }))} />
+            <MonthlyRevenueTrend data={monthly} />
           </CardContent>
         </Card>
 
