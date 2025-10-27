@@ -16,7 +16,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <MobileNav />
             <Link href="/" className="flex items-center gap-2">
@@ -56,7 +56,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </div>
       </header>
-      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 py-6 sm:px-5 lg:px-7">
+      <div className="mx-auto flex w-full max-w-[1200px] flex-1 gap-6 px-4 py-6 sm:px-6 lg:px-8">
         <aside className="hidden md:flex md:w-72 md:shrink-0">
           <div className="sticky top-24 h-[calc(100vh-6rem)] w-full rounded-2xl border bg-background/80 px-4 pb-6 pt-4 shadow-sm backdrop-blur">
             <div className="mb-4">

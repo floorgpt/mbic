@@ -31,13 +31,11 @@ type Props = {
 
 export function MonthlyRevenueTrend({ data }: Props) {
   if (!data.length) {
-    return (
-      <div className="h-[220px] animate-pulse rounded-xl bg-muted/40 md:h-[260px]" />
-    );
+    return <div className="h-[260px] animate-pulse rounded-xl bg-muted/40 md:h-[300px]" />;
   }
 
   return (
-    <div className="h-[260px] w-full md:h-[300px]">
+    <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={data}

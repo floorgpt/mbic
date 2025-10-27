@@ -70,6 +70,34 @@ export type OrgKpis = {
   top_dealer_revenue: number;
 };
 
+export type GrossProfit = {
+  amount: number;
+  margin_pct: number;
+};
+
+export type FillRate = {
+  pct: number;
+};
+
+export async function getFillRateSafe(from: DateISO, to: DateISO): Promise<SafeResult<FillRate>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("sales_org_fill_rate_v1", {
+      from_date: from,
+      to_date: to,
+    }),
+    "sales_org_fill_rate_v1",
+    [],
+  );
+  const row = (safe.data ?? [])[0] ?? {};
+  const mapped: FillRate = {
+    pct: asNumber(row.pct ?? row.fill_rate ?? row.percentage, 0),
+  };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped ? 1 : 0 },
+  };
+}
+
 export async function getOrgKpis(from: DateISO, to: DateISO): Promise<OrgKpis> {
   const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_org_kpis_v2",
@@ -102,6 +130,26 @@ export async function getOrgKpisSafe(from: DateISO, to: DateISO): Promise<SafeRe
     avg_invoice: asNumber(row.avg_invoice, 0),
     top_dealer: typeof row.top_dealer === "string" ? row.top_dealer : null,
     top_dealer_revenue: asNumber(row.top_dealer_revenue, 0),
+  };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped ? 1 : 0 },
+  };
+}
+
+export async function getOrgGrossProfitSafe(from: DateISO, to: DateISO): Promise<SafeResult<GrossProfit>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("sales_org_gross_profit_v1", {
+      from_date: from,
+      to_date: to,
+    }),
+    "sales_org_gross_profit_v1",
+    [],
+  );
+  const row = (safe.data ?? [])[0] ?? {};
+  const mapped: GrossProfit = {
+    amount: asNumber(row.amount ?? row.gross_profit ?? row.total_profit, 0),
+    margin_pct: asNumber(row.margin_pct ?? row.margin_percent ?? row.margin, 0),
   };
   return {
     data: mapped,
@@ -288,6 +336,13 @@ export type CategoryRow = {
   share_pct: number;
 };
 
+export type TopCollectionRow = {
+  collection_key: string;
+  collection_name: string;
+  lifetime_sales: number;
+  share_pct: number;
+};
+
 export async function getCategoryTotals(from: DateISO, to: DateISO): Promise<CategoryRow[]> {
   const rows = await callRpc<Array<Record<string, NumericLike | string>>>(
     "sales_category_totals",
@@ -327,6 +382,99 @@ export async function getCategoryTotalsSafe(from: DateISO, to: DateISO): Promise
     data: mapped,
     _meta: { ...safe._meta, count: mapped.length },
   };
+}
+
+async function getCollectionsFallback(from: DateISO, to: DateISO): Promise<TopCollectionRow[]> {
+  type CollectionFallbackRow = {
+    collection_norm: string | null;
+    collection: string | null;
+    invoice_amount: NumericLike;
+    invoice_date: string | null;
+  };
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("v_sales_norm")
+    .select("collection_norm, collection, invoice_amount, invoice_date")
+    .gte("invoice_date", from)
+    .lte("invoice_date", to);
+
+  if (error) {
+    throw error;
+  }
+
+  const grouped = new Map<string, { name: string; total: number }>();
+  let grandTotal = 0;
+
+  const rows = (data as CollectionFallbackRow[] | null) ?? [];
+
+  rows.forEach((row) => {
+    const amount = asNumber(row.invoice_amount, 0);
+    if (!amount) return;
+    const rawName = row.collection ?? undefined;
+    const normalized = row.collection_norm ?? rawName ?? "Uncategorized";
+    const key = normalized || "uncategorized";
+    const entry = grouped.get(key) ?? { name: rawName ?? normalized ?? "Uncategorized", total: 0 };
+    entry.total += amount;
+    grouped.set(key, entry);
+    grandTotal += amount;
+  });
+
+  const totals = Array.from(grouped.entries())
+    .map(([collection_key, value]) => ({
+      collection_key,
+      collection_name: value.name,
+      lifetime_sales: value.total,
+      share_pct: grandTotal ? (value.total / grandTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.lifetime_sales - a.lifetime_sales)
+    .slice(0, 20);
+
+  return totals;
+}
+
+export async function getTopCollectionsSafe(from: DateISO, to: DateISO): Promise<SafeResult<TopCollectionRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("sales_org_top_collections", {
+      from_date: from,
+      to_date: to,
+    }),
+    "sales_org_top_collections",
+    [],
+  );
+
+  if (safe._meta.ok) {
+    const mapped = (safe.data ?? []).map((row) => ({
+      collection_key: typeof row.collection_key === "string" ? row.collection_key : String(row.collection ?? row.collection_norm ?? "collection"),
+      collection_name: typeof row.collection_name === "string"
+        ? row.collection_name
+        : typeof row.collection === "string"
+          ? row.collection
+          : typeof row.collection_norm === "string"
+            ? row.collection_norm
+            : "Collection",
+      lifetime_sales: asNumber(row.lifetime_sales ?? row.total_sales ?? row.amount ?? row.sum, 0),
+      share_pct: asNumber(row.share_pct ?? row.share ?? 0, 0),
+    }));
+    return {
+      data: mapped,
+      _meta: { ...safe._meta, count: mapped.length },
+    };
+  }
+
+  try {
+    const fallbackData = await getCollectionsFallback(from, to);
+    return {
+      data: fallbackData,
+      _meta: { ok: true, count: fallbackData.length },
+    };
+  } catch (error) {
+    console.error("Server fetch failed (collections_fallback):", error);
+    return {
+      data: [],
+      _meta: { ok: false, count: 0, err: (error as Error)?.message },
+    };
+  }
 }
 
 export type DealerEngagementRow = {

@@ -4,7 +4,6 @@ import { ArrowUpRight, TrendingUp, Users } from "lucide-react";
 
 import { DealerHeatmap } from "@/components/dashboard/dealer-heatmap";
 import { MonthlyRevenueTrend } from "@/components/dashboard/monthly-revenue-trend";
-import { TopProductsGrid } from "@/components/dashboard/top-products-grid";
 import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -20,13 +19,19 @@ import {
 import {
   getCategoryTotalsSafe,
   getDealerEngagementSafe,
+  getFillRateSafe,
+  getOrgGrossProfitSafe,
   getOrgKpisSafe,
   getOrgMonthlySafe,
+  getTopCollectionsSafe,
   getTopDealersSafe,
   getTopRepsSafe,
   type CategoryRow,
   type DealerRow,
   type DealerEngagementRow,
+  type FillRate,
+  type GrossProfit,
+  type TopCollectionRow,
   type RepRow,
   type OrgKpis,
   type MonthlyPoint,
@@ -37,10 +42,10 @@ import { cn, getIcon, type PanelMeta, type SafeResult } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const runtime = "nodejs";
 
 const DEFAULT_FROM = "2025-01-01";
 const DEFAULT_TO = "2025-10-01";
-const TOP_PRODUCTS_PAGE_SIZE = 6;
 const DEFAULT_KPIS: OrgKpis = {
   revenue: 0,
   unique_dealers: 0,
@@ -48,6 +53,8 @@ const DEFAULT_KPIS: OrgKpis = {
   top_dealer: null,
   top_dealer_revenue: 0,
 };
+const DEFAULT_GROSS_PROFIT = { amount: 0, margin_pct: 0 } satisfies GrossProfit;
+const DEFAULT_FILL_RATE = { pct: 0 } satisfies FillRate;
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
 
@@ -65,20 +72,6 @@ function normalizeParam(value: string | string[] | undefined): string | undefine
     return value[0];
   }
   return value;
-}
-
-function buildHref(params: DashboardSearchParams, targetPage: number) {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (!value || key === "topProductsPage") return;
-    if (Array.isArray(value)) {
-      value.forEach((entry) => query.append(key, entry));
-    } else {
-      query.set(key, value);
-    }
-  });
-  query.set("topProductsPage", String(targetPage));
-  return `?${query.toString()}`;
 }
 
 function DataPlaceholder({ message = "No data for this period." }: { message?: string }) {
@@ -173,6 +166,39 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
   );
 }
 
+function TopCollectionsList({ collections }: { collections: TopCollectionRow[] }) {
+  if (!collections.length) {
+    return <DataPlaceholder message="Data available soon." />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {collections.map((item) => (
+        <div
+          key={item.collection_key}
+          className="flex items-center justify-between gap-3 rounded-xl border border-black/5 bg-card/80 px-4 py-3 shadow-sm"
+        >
+          <div className="min-w-0">
+            <p className="truncate font-medium tracking-tight">{item.collection_name}</p>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {fmtUSD0(item.lifetime_sales)} lifetime
+            </p>
+          </div>
+          <Badge variant="secondary" className="rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wide">
+            {fmtPct0(item.share_pct)} share
+          </Badge>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function toPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value > 1) return value;
+  return value * 100;
+}
+
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   noStore();
 
@@ -194,37 +220,48 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const envReady = envIssues.length === 0;
 
   let kpisState: PanelState<OrgKpis>;
+  let grossProfitState: PanelState<GrossProfit>;
+  let fillRateState: PanelState<FillRate>;
   let monthlyState: PanelState<MonthlyPoint[]>;
   let dealersState: PanelState<DealerRow[]>;
   let repsState: PanelState<RepRow[]>;
   let categoriesState: PanelState<CategoryRow[]>;
+  let collectionsState: PanelState<TopCollectionRow[]>;
   let engagementState: PanelState<DealerEngagementRow[]>;
 
   if (envReady) {
-    const panelPromises: [
-      Promise<SafeResult<OrgKpis>>,
-      Promise<SafeResult<MonthlyPoint[]>>,
-      Promise<SafeResult<DealerRow[]>>,
-      Promise<SafeResult<RepRow[]>>,
-      Promise<SafeResult<CategoryRow[]>>,
-      Promise<SafeResult<DealerEngagementRow[]>>,
-    ] = [
+    const panelPromises = [
       getOrgKpisSafe(from, to),
+      getOrgGrossProfitSafe(from, to),
+      getFillRateSafe(from, to),
       getOrgMonthlySafe(from, to),
       getTopDealersSafe(from, to, 10, 0),
       getTopRepsSafe(from, to, 10, 0),
       getCategoryTotalsSafe(from, to),
+      getTopCollectionsSafe(from, to),
       getDealerEngagementSafe(from, to),
-    ];
+    ] as const;
 
-    const [kpisRes, monthlyRes, dealersRes, repsRes, categoriesRes, engagementRes] =
-      await Promise.allSettled(panelPromises);
+    const [
+      kpisRes,
+      grossProfitRes,
+      fillRateRes,
+      monthlyRes,
+      dealersRes,
+      repsRes,
+      categoriesRes,
+      collectionsRes,
+      engagementRes,
+    ] = await Promise.allSettled(panelPromises);
 
     kpisState = resolvePanelResult(kpisRes, DEFAULT_KPIS, "sales_org_kpis_v2");
+    grossProfitState = resolvePanelResult(grossProfitRes, DEFAULT_GROSS_PROFIT, "sales_org_gross_profit_v1");
+    fillRateState = resolvePanelResult(fillRateRes, DEFAULT_FILL_RATE, "sales_org_fill_rate_v1");
     monthlyState = resolvePanelResult(monthlyRes, [], "sales_org_monthly_v2");
     dealersState = resolvePanelResult(dealersRes, [], "sales_org_top_dealers");
     repsState = resolvePanelResult(repsRes, [], "sales_org_top_reps");
     categoriesState = resolvePanelResult(categoriesRes, [], "sales_category_totals");
+    collectionsState = resolvePanelResult(collectionsRes, [], "sales_org_top_collections");
     engagementState = resolvePanelResult(
       engagementRes,
       [],
@@ -233,10 +270,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   } else {
     const meta = createPanelErrorMeta(envWarningMessage ?? "Supabase credentials missing");
     kpisState = { data: DEFAULT_KPIS, meta };
+    grossProfitState = { data: DEFAULT_GROSS_PROFIT, meta };
+    fillRateState = { data: DEFAULT_FILL_RATE, meta };
     monthlyState = { data: [], meta };
     dealersState = { data: [], meta };
     repsState = { data: [], meta };
     categoriesState = { data: [], meta };
+    collectionsState = { data: [], meta };
     engagementState = { data: [], meta };
   }
 
@@ -244,14 +284,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     from,
     to,
     kpis: kpisState.meta,
+    grossProfit: grossProfitState.meta,
+    fillRate: fillRateState.meta,
     monthly: monthlyState.meta,
     dealers: dealersState.meta,
     reps: repsState.meta,
     cats: categoriesState.meta,
+    collections: collectionsState.meta,
     engage: engagementState.meta,
   });
 
   const totalRevenue = kpisState.data.revenue ?? 0;
+  const grossProfit = grossProfitState.data ?? DEFAULT_GROSS_PROFIT;
+  const grossMarginPct = toPercent(grossProfit.margin_pct ?? 0);
+  const fillRatePct = toPercent(fillRateState.data.pct ?? 0);
+
   const latestEngagement = engagementState.data.at(-1) ?? {
     active_cnt: 0,
     inactive_cnt: 0,
@@ -263,11 +310,24 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     (category) => category.category_key !== "__UNMAPPED__",
   );
   const sortedCategories = [...filteredCategories].sort((a, b) => b.total_sales - a.total_sales);
-  const topProductsTotalPages = Math.max(1, Math.ceil(sortedCategories.length / TOP_PRODUCTS_PAGE_SIZE));
-  const topProductsPageParam = parseInt(normalizeParam(params.topProductsPage) ?? "1", 10);
-  const currentTopProductsPage = Number.isNaN(topProductsPageParam)
-    ? 1
-    : Math.min(Math.max(topProductsPageParam, 1), topProductsTotalPages);
+  const topCollections = collectionsState.data.slice(0, 10);
+  const ytdTotal = monthlyState.data.reduce((sum, row) => sum + (row.total ?? 0), 0);
+
+  const grossRevenueSubtitle = `— • No Year-over-Year delta • data available from ${from} to ${to}`;
+  const grossProfitValue = grossProfitState.meta.ok ? fmtPct0(grossMarginPct) : "0 %";
+  const grossProfitSubtitle = grossProfitState.meta.ok
+    ? `${fmtUSD0(grossProfit.amount)} gross profit`
+    : "Data available soon";
+  const activeDealersValue = formatNumber(kpisState.data.unique_dealers ?? 0);
+  const activeDealersSubtitle = engagementState.meta.ok
+    ? `${formatNumber(latestEngagement.total_assigned ?? 0)} total assigned • ${fmtPct0(latestEngagement.active_pct ?? 0)} active`
+    : "Data available soon";
+  const fillRateValue = fillRateState.meta.ok ? fmtPct0(fillRatePct) : "— %";
+  const fillRateSubtitle = fillRateState.meta.ok ? "Average order fill rate" : "Data available soon";
+  const activeDealersMeta =
+    kpisState.meta.ok && engagementState.meta.ok
+      ? engagementState.meta
+      : createPanelErrorMeta(engagementState.meta.err ?? kpisState.meta.err ?? "Active dealers unavailable");
 
   const envBanner = envWarningMessage ? (
     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -283,34 +343,33 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         description="High-level KPIs across sales, marketing, and customer sentiment."
       />
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 md:gap-6">
         <KpiCard
-          title="Revenue YTD"
+          title="Gross Revenue"
           value={fmtUSD0(totalRevenue)}
-          delta={{
-            value: "—",
-            trend: "neutral",
-            description: "No Year-over-Year delta • data available from 2025-01-01 to 2025-09-30",
-          }}
+          subtitle={grossRevenueSubtitle}
           icon={TrendingUp}
           statusBadge={<PanelFailureBadge meta={kpisState.meta} />}
         />
         <KpiCard
-          title="Active Dealers"
-          value={formatNumber(latestEngagement.active_cnt)}
-          delta={{
-            value: `${formatNumber(latestEngagement.total_assigned)} total assigned`,
-            trend: "neutral",
-            description: `${fmtPct0(latestEngagement.active_pct)} active`,
-          }}
-          icon={Users}
-          statusBadge={<PanelFailureBadge meta={engagementState.meta} />}
+          title="Gross Profit"
+          value={grossProfitValue}
+          subtitle={grossProfitSubtitle}
+          statusBadge={<PanelFailureBadge meta={grossProfitState.meta} />}
         />
         <KpiCard
-          title="Growth Rate"
-          value="—"
-          delta={{ value: "Not enough data", trend: "neutral" }}
+          title="Active Dealers"
+          value={activeDealersValue}
+          subtitle={activeDealersSubtitle}
+          icon={Users}
+          statusBadge={<PanelFailureBadge meta={activeDealersMeta} />}
+        />
+        <KpiCard
+          title="Fill Rate"
+          value={fillRateValue}
+          subtitle={fillRateSubtitle}
           icon={ArrowUpRight}
+          statusBadge={<PanelFailureBadge meta={fillRateState.meta} />}
         />
       </section>
 
@@ -323,7 +382,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </div>
             <PanelFailureBadge meta={monthlyState.meta} />
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground/80">Year to date</p>
+              <p className="font-montserrat text-lg font-semibold tabular-nums sm:text-xl">
+                {fmtUSD0(ytdTotal)}
+              </p>
+            </div>
             <MonthlyRevenueTrend data={monthlyState.data} />
           </CardContent>
         </Card>
@@ -332,19 +397,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:p-6">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Top Products</CardTitle>
-                <p className="text-sm text-muted-foreground">Leading categories by revenue share.</p>
+                <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Top Collections</CardTitle>
+                <p className="text-sm text-muted-foreground">All-time sales performance by collection.</p>
               </div>
-              <PanelFailureBadge meta={categoriesState.meta} />
+              <PanelFailureBadge meta={collectionsState.meta} />
             </div>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
-            <TopProductsGrid
-              products={sortedCategories}
-              currentPage={currentTopProductsPage}
-              pageSize={TOP_PRODUCTS_PAGE_SIZE}
-              buildPageHref={(page) => buildHref(params, page)}
-            />
+            <TopCollectionsList collections={topCollections} />
           </CardContent>
         </Card>
       </section>

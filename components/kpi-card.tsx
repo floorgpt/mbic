@@ -5,14 +5,14 @@ import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+type Tone = "neutral" | "up" | "down";
+
 type KpiCardProps = {
   title: string;
   value: string;
-  delta?: {
-    value: string;
-    trend: "up" | "down" | "neutral";
-    description?: string;
-  };
+  subtitle?: string;
+  helper?: string;
+  tone?: Tone;
   icon?: LucideIcon;
   className?: string;
   statusBadge?: ReactNode;
@@ -21,7 +21,9 @@ type KpiCardProps = {
 export function KpiCard({
   title,
   value,
-  delta,
+  subtitle,
+  helper,
+  tone = "neutral",
   icon: Icon,
   className,
   statusBadge,
@@ -45,21 +47,21 @@ export function KpiCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-2 p-4 pt-3 sm:p-6">
-        <div className="font-montserrat text-2xl font-semibold tabular-nums md:text-3xl">
+        <div className="font-montserrat text-3xl font-semibold tabular-nums md:text-4xl">
           {value}
         </div>
-        {delta ? (
+        {subtitle ? (
           <p
             className={cn(
               "text-xs text-muted-foreground",
-              delta.trend === "up" && "text-emerald-500",
-              delta.trend === "down" && "text-rose-500",
+              tone === "up" && "text-emerald-500",
+              tone === "down" && "text-rose-500",
             )}
           >
-            {delta.value}
-            {delta.description ? ` • ${delta.description}` : null}
+            {subtitle}
           </p>
         ) : null}
+        {helper ? <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80">{helper}</p> : null}
       </CardContent>
     </Card>
   );

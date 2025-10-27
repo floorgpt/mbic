@@ -113,18 +113,12 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         <KpiCard
           title="Total Revenue"
           value={formatCurrency(totalRevenue)}
-          delta={{
-            value: `${formatNumber(totalInvoices)} invoices`,
-            trend: "neutral",
-          }}
+          subtitle={`${formatNumber(totalInvoices)} invoices`}
         />
         <KpiCard
           title="Customers Handled"
           value={formatNumber(customersHandled)}
-          delta={{
-            value: "Unique dealers in the last 12 months",
-            trend: "neutral",
-          }}
+          subtitle="Unique dealers in the last 12 months"
           icon={Users2}
         />
         <KpiCard
@@ -138,14 +132,12 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         <KpiCard
           title="Top Dealer"
           value={salesData.dealers[0]?.dealer_name ?? "—"}
-          delta={
+          subtitle={
             salesData.dealers[0]
-              ? {
-                  value: formatCurrency(salesData.dealers[0].revenue),
-                  trend: "up",
-                }
-              : undefined
+              ? formatCurrency(salesData.dealers[0].revenue)
+              : "Data available soon"
           }
+          tone={salesData.dealers[0] ? "up" : "neutral"}
         />
       </section>
 
@@ -208,10 +200,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                   <KpiCard
                     title="Dealer Revenue"
                     value={formatCurrency(selectedDealer.revenue)}
-                    delta={{
-                      value: `${formatNumber(selectedDealer.invoices)} invoices`,
-                      trend: "neutral",
-                    }}
+                    subtitle={`${formatNumber(selectedDealer.invoices)} invoices`}
                   />
                   <KpiCard
                     title="Average Invoice"
@@ -228,7 +217,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                   <KpiCard
                     title="Trend Months"
                     value={`${dealerMonthly.length}`}
-                    delta={{ value: "months tracked", trend: "neutral" }}
+                    subtitle="months tracked"
                   />
                 </div>
                 <div className="rounded-2xl border bg-background/70 p-4">

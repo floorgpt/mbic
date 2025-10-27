@@ -48,37 +48,105 @@ npm run build
 ## Development Notes
 
 - UI tokens are centralised via Tailwind CSS and shadcn/ui. Prefer updating custom tokens through `tailwind.config` or component-level classes instead of mutating third-party theme types.
-- Supabase queries live in `lib/supabase/queries.ts` and are shared by page components and API handlers.
+- Supabase service-role access is created once per request via `lib/supabase/admin.ts` (`createClient` with `SUPABASE_SERVICE_ROLE_KEY`). All server-side helpers call this factory—never instantiate a Supabase client directly in components.
 - `middleware.ts` protects the Retell AI webhook by enforcing `RETELL_AI_SECRET`.
 
-## Data Architecture & Supabase Integration
+## Data Sources & Page Wiring (Dashboard & Sales)
 
-The MBIC dashboard relies on Supabase Postgres as the single source of truth. Below is a map of the current tables and where they surface in the UI.
+The CPF MBIC stack pulls all production data from Supabase. Two sets of helpers exist:
 
-### Sales & Revenue (Dashboard + Sales pages)
+1. **Dashboard-safe helpers** (`lib/mbic-supabase.ts`) used by the App Router dashboard route and `/api/diag`.
+2. **Sales detail helpers** (`lib/mbic-sales.ts` + `lib/supabase/queries.ts`) used by the Sales drill-down experience.
 
-| Table | Purpose | Screen usage | Helper functions |
+Both rely on the same Supabase service-role client and share numeric coercion utilities.
+
+### Shared RPC Endpoints
+
+The following RPCs are executed for every dashboard render (and the `/api/diag` route):
+
+| RPC | Parameters | Returns | Notes |
 | --- | --- | --- | --- |
-| `sales_demo` | Raw invoice data (amount, date, rep, customer). Columns include `sale_id`, `customer_id`, `rep_id`, `invoice_date`, `invoice_amount`, `collection`, etc. | Dashboard KPI cards, revenue trend, “Top Dealers” table, Sales Performance metrics | `lib/supabase/queries.ts` → `fetchRevenueSummary`, `fetchRevenueTrend`, `fetchTopDealers`, `fetchDealerBreakdownByRep`, `fetchRepSalesTrend`, `fetchDealerSalesTrend` |
-| `customers_demo` | Dealer records linked to reps (`rep_id`). Columns: `customer_id`, `dealer_name`, `rep_id`. | Resolves dealer names when aggregating revenue | Same helpers as above |
-| `sales_reps_demo` | Sales rep directory containing `rep_id`, `rep_name` (and additional profile columns). | Populates the Sales rep dropdown and the “Top Sales Reps by Revenue” ranking | `fetchSalesReps`, `fetchTopRepsByRevenue`, `fetchActiveCustomersByRep` |
+| `sales_org_kpis_v2` | `from_date`, `to_date` | Single row `{ revenue, unique_dealers, avg_invoice, top_dealer, top_dealer_revenue }` | Fallback mapping handles legacy column names (`revenue_ytd`, `active_dealers`). |
+| `sales_org_monthly_v2` | `from_date`, `to_date` | `[{ month, total }]` | Coerces possible `month_total` / `sum` aliases. |
+| `sales_org_top_dealers` | `from_date`, `to_date`, `limit`, `offset` | Dealer leaderboard with revenue + share. | Share is recalculated client-side if not supplied. |
+| `sales_org_top_reps` | `from_date`, `to_date`, `limit`, `offset` | Rep leaderboard with revenue and activity stats. | Numeric guardrails ensure missing values print as `—`. |
+| `sales_category_totals` | `from_date`, `to_date` | Category totals with Cloudinary icon URLs. | UI filters out `__UNMAPPED__` and replaces missing icons via `getIcon`. |
+| `sales_org_dealer_engagement_trailing_v3` | `from_date`, `to_date` | Monthly assigned vs. active dealers. | Sorted chronologically in the component before rendering. |
 
-The helper util `fetchDataset` (in `lib/supabase/queries.ts`) batches all three tables per request. Numeric values coming from Supabase (`numeric` columns) are coerced to Numbers before aggregation so the UI can format them reliably.
+All helpers return a `SafeResult<T>` object:
+
+```ts
+type PanelMeta = { ok: boolean; count: number; err?: string };
+type SafeResult<T> = { data: T; _meta: PanelMeta };
+```
+
+- `_meta.ok` is `false` only when the RPC throws; the dashboard shows a “Panel failed” chip but still renders empty states.
+- `tryServerSafe` logs every failure as `Server fetch failed (rpc_name): …` and returns fallback data shaped exactly like the RPC output.
+
+### Dashboard (`app/(dashboard)/page.tsx`)
+
+1. The route is explicitly dynamic (`export const dynamic = 'force-dynamic'`) and forces `runtime = 'nodejs'` to guarantee access to server-only environment variables on Netlify.
+2. Query params (`from`, `to`, `topProductsPage`) are read as strings and default to the PRD timeframe (`2025-01-01` → `2025-10-01`).
+3. When both `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present:
+   - `Promise.allSettled` fetches every helper simultaneously.
+   - Results are normalised via `resolvePanelResult`, ensuring `PanelState<T>` always contains `{ data, meta }`.
+   - A single `[dash-panels]` log emits `{ ok, count, err? }` for every panel per SSR render (used for Netlify observability).
+4. When env vars are missing, the helper layer is skipped entirely. A banner renders and `_meta.ok` is forced to `false` so every panel stays in sync.
+5. The UI reads `state.meta.ok` to decide whether to show the “Panel failed” badge while still displaying placeholders so the page stays responsive even when some RPCs fail.
+
+You can reproduce the data snapshot locally with:
+
+```bash
+npm run dev
+open http://localhost:3000/api/diag?from=2025-01-01&to=2025-10-01
+open http://localhost:3000/
+```
+
+### `/api/diag`
+
+This route (`app/api/diag/route.ts`) exists for QA and external integrations. It calls the **non-safe** helpers (`getOrgKpis`, `getOrgMonthly`, etc.) which throw on error instead of returning fallbacks. The route mirrors the same input defaults and is the quickest way to confirm Supabase data availability.
+
+### Sales Performance (`app/(dashboard)/sales/page.tsx`)
+
+The Sales page uses enriched helper functions because it needs per-rep drill downs:
+
+- `fetchSalesReps()` retrieves the selectable rep list.
+- `fetchRepSalesData(repId)` aggregates:
+  - Total revenue, invoice counts, unique dealers.
+  - Monthly revenue per selected rep (`RepSalesTrend` chart).
+  - Dealer-level revenue for the breakdown table (`DealerBreakdownTable`).
+- `getDealerMonthly(repId, dealerId)` powers the dealer comparison view and is reused for data consistency validations (Linda Flooring guardrail).
+
+All Sales helpers sit in `lib/mbic-sales.ts` / `lib/db/sales.ts` because they touch additional SQL views. They continue to share the same `getSupabaseAdminClient` factory and numeric coercion utilities to avoid drift.
+
+### Failure Handling & Logging
+
+| Layer | Behaviour | Output |
+| --- | --- | --- |
+| `tryServerSafe` | Catches Supabase SDK errors, logs once, returns typed fallback. | `Server fetch failed (rpc_name): …` |
+| Dashboard route | Aggregates meta info, logs once per render. | `[dash-panels] { from, to, kpis: { ok, count, err? }, … }` |
+| API route | Throws on first failure with HTTP 500. | `{ ok: false, error }` payload |
+
+When debugging regressions, compare the `/api/diag` output with the `[dash-panels]` log for the same timeframe. If `/api/diag` succeeds while `kpis.meta.ok` is `false`, inspect the App Router runtime (should be `nodejs`) or new conditions in `resolvePanelResult`.
+
+## Additional Data Tables
+
+While the Dashboard and Sales flows cover the bulk of Supabase access, other screens rely on additional tables:
 
 ### Customer Sentiment
 
-| Table | Purpose | Screen usage | Helper functions |
+| Table | Purpose | Screen usage | Helper |
 | --- | --- | --- | --- |
 | `sentiment_stories` | Stores qualitative feedback (`brand`, `summary`, `quote`, `sentiment`, `keywords`, `channel`, timestamps). | Customer Sentiment page cards (`/sentiment`) | `lib/supabase/sentiment.ts` → `fetchSentimentStories` |
 
 ### Marketing (CPF Launchpad)
 
-| Table | Purpose | Screen usage | Helper / Sync |
+| Table | Purpose | Screen usage | Sync mechanism |
 | --- | --- | --- | --- |
-| `marketing_cpf_launchpad_summary` | Daily KPI snapshot (`unique_visitors`, `sessions`, `bounce_rate`, `leads`, `cpl`, `daily_budget`). | Marketing KPI cards | Filled by Supabase Edge Function `fetch-cpf-launchpad-marketing-data` (nightly GitHub Action + manual sync button) |
-| `marketing_cpf_launchpad_daily` | Per-channel Google/Meta timeseries (`stat_date`, `channel`, `spend`, `leads`, `clicks`). | Leads by Platform & Daily Spend charts | Same Edge Function + manual sync |
+| `marketing_cpf_launchpad_summary` | Daily KPI snapshot (`unique_visitors`, `sessions`, `bounce_rate`, `leads`, `cpl`, `daily_budget`). | Marketing KPI cards | Supabase Edge Function `fetch-cpf-launchpad-marketing-data` (nightly + manual sync CTA). |
+| `marketing_cpf_launchpad_daily` | Per-channel Google/Meta timeseries (`stat_date`, `channel`, `spend`, `leads`, `clicks`). | Leads by Platform & Daily Spend charts | Same Edge Function. |
 
-The frontend still ships with fallback seed data in `lib/data/marketing.ts`, but once the GA integration is fully wired, the Marketing screen will read directly from the Supabase tables above.
+The marketing page ships with lightweight fallback data (`lib/data/marketing.ts`) purely for local development. Production always pulls from Supabase.
 
 ## Deployment (Netlify)
 
