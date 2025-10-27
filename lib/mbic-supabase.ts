@@ -88,7 +88,7 @@ export async function getOrgMonthly(from: DateISO, to: DateISO): Promise<Monthly
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
     month: typeof row.month === "string" ? row.month : (row.month_label as string) ?? "",
-    total: asNumber(row.month_total, 0),
+    total: asNumber(row.month_total ?? row.total, 0),
   }));
 }
 
