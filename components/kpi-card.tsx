@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -13,6 +15,7 @@ type KpiCardProps = {
   };
   icon?: LucideIcon;
   className?: string;
+  statusBadge?: ReactNode;
 };
 
 export function KpiCard({
@@ -21,26 +24,36 @@ export function KpiCard({
   delta,
   icon: Icon,
   className,
+  statusBadge,
 }: KpiCardProps) {
   return (
-    <Card className={cn("border-none bg-gradient-to-br from-background to-muted", className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <Card
+      className={cn(
+        "rounded-2xl border border-black/5 bg-card shadow-sm transition-colors",
+        className,
+      )}
+    >
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 p-4 sm:p-6 pb-0">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        {Icon ? <Icon className="size-4 text-muted-foreground" /> : null}
+        <div className="flex items-center gap-2">
+          {statusBadge}
+          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-muted-foreground/20 text-muted-foreground/70">
+            {Icon ? <Icon className="size-3" /> : null}
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
-        <div className="font-montserrat text-2xl font-semibold tracking-tight">
+      <CardContent className="space-y-2 p-4 pt-3 sm:p-6">
+        <div className="font-montserrat text-2xl font-semibold tabular-nums md:text-3xl">
           {value}
         </div>
         {delta ? (
           <p
             className={cn(
-              "mt-2 text-xs font-medium",
+              "text-xs text-muted-foreground",
               delta.trend === "up" && "text-emerald-500",
               delta.trend === "down" && "text-rose-500",
-              delta.trend === "neutral" && "text-muted-foreground",
             )}
           >
             {delta.value}

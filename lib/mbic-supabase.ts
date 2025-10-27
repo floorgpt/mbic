@@ -3,8 +3,7 @@
 import "server-only";
 
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getIcon, tryServerSafe, type SafeResult } from "@/lib/utils";
-import { tryServer } from "@/lib/utils";
+import { getIcon, tryServer, tryServerSafe, type SafeResult } from "@/lib/utils";
 
 export type DateISO = string;
 
@@ -44,7 +43,7 @@ async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<
   const rpcPromise: Promise<RpcResponse<T>> = new Promise((resolve, reject) => {
     rpcBuilder.then(resolve, reject);
   });
-  const [result, caught] = await tryServer(rpcPromise, fn);
+  const [result, caught] = await tryServer(rpcPromise);
   if (caught) {
     logRpc(fn, params, caught);
     throw caught;
@@ -104,7 +103,10 @@ export async function getOrgKpisSafe(from: DateISO, to: DateISO): Promise<SafeRe
     top_dealer: typeof row.top_dealer === "string" ? row.top_dealer : null,
     top_dealer_revenue: asNumber(row.top_dealer_revenue, 0),
   };
-  return { data: mapped, error: safe.error };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped ? 1 : 0 },
+  };
 }
 
 export type MonthlyPoint = { month: string; total: number };
@@ -136,7 +138,10 @@ export async function getOrgMonthlySafe(from: DateISO, to: DateISO): Promise<Saf
     month: typeof row.month === "string" ? row.month : (row.month_label as string) ?? "",
     total: asNumber(row.total ?? row.month_total ?? (row.sum as NumericLike) ?? 0, 0),
   }));
-  return { data: mapped, error: safe.error };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
 }
 
 export type DealerRow = {
@@ -204,8 +209,10 @@ export async function getTopDealersSafe(
         ? row.rep_initials
         : null,
   }));
-
-  return { data: mapped, error: safe.error };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
 }
 
 export type RepRow = {
@@ -267,8 +274,10 @@ export async function getTopRepsSafe(
     total_customers: asNumber(row.total_customers, 0),
     active_pct: row.active_pct == null ? null : asNumber(row.active_pct, 0),
   }));
-
-  return { data: mapped, error: safe.error };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
 }
 
 export type CategoryRow = {
@@ -314,8 +323,10 @@ export async function getCategoryTotalsSafe(from: DateISO, to: DateISO): Promise
       total_sales: asNumber(row.total_sales, 0),
       share_pct: asNumber(row.share_pct, 0),
     }));
-
-  return { data: mapped, error: safe.error };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
 }
 
 export type DealerEngagementRow = {
@@ -362,6 +373,8 @@ export async function getDealerEngagementSafe(
     total_assigned: asNumber(row.total_assigned, 0),
     active_pct: asNumber(row.active_pct, 0),
   }));
-
-  return { data: mapped, error: safe.error };
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
 }

@@ -67,7 +67,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <SidebarNav />
           </div>
         </aside>
-        <main className="flex-1 pb-12">{children}</main>
+        <main className="flex-1 min-w-0 pb-12">{children}</main>
       </div>
     </div>
   );

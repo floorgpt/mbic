@@ -1,10 +1,6 @@
 import Image from "next/image";
-import {
-  ArrowUpRight,
-  LineChart as LineChartIcon,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { unstable_noStore as noStore } from "next/cache";
+import { ArrowUpRight, TrendingUp, Users } from "lucide-react";
 
 import { DealerHeatmap } from "@/components/dashboard/dealer-heatmap";
 import { MonthlyRevenueTrend } from "@/components/dashboard/monthly-revenue-trend";
@@ -37,13 +33,21 @@ import {
 } from "@/lib/mbic-supabase";
 import { fmtPct0, fmtUSD0 } from "@/lib/format";
 import { formatNumber } from "@/lib/utils/format";
-import { getIcon, type SafeResult } from "@/lib/utils";
+import { cn, getIcon, type PanelMeta, type SafeResult } from "@/lib/utils";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const DEFAULT_FROM = "2025-01-01";
 const DEFAULT_TO = "2025-10-01";
 const TOP_PRODUCTS_PAGE_SIZE = 6;
+const DEFAULT_KPIS: OrgKpis = {
+  revenue: 0,
+  unique_dealers: 0,
+  avg_invoice: 0,
+  top_dealer: null,
+  top_dealer_revenue: 0,
+};
 
 type DashboardSearchParams = Record<string, string | string[] | undefined>;
 
@@ -51,20 +55,16 @@ type DashboardPageProps = {
   searchParams?: Promise<DashboardSearchParams>;
 };
 
+type PanelState<T> = {
+  data: T;
+  meta: PanelMeta;
+};
+
 function normalizeParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) {
     return value[0];
   }
   return value;
-}
-
-function resolveDate(value: string | undefined, fallback: string): string {
-  if (!value) return fallback;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return fallback;
-  }
-  return parsed.toISOString().slice(0, 10);
 }
 
 function buildHref(params: DashboardSearchParams, targetPage: number) {
@@ -89,31 +89,81 @@ function DataPlaceholder({ message = "No data for this period." }: { message?: s
   );
 }
 
+function createPanelErrorMeta(message?: string): PanelMeta {
+  return {
+    ok: false,
+    count: 0,
+    ...(message ? { err: message } : {}),
+  };
+}
+
+function resolvePanelResult<T>(
+  result: PromiseSettledResult<SafeResult<T>>,
+  fallback: T,
+  label: string,
+): PanelState<T> {
+  if (result.status === "fulfilled" && result.value) {
+    return {
+      data: result.value.data ?? fallback,
+      meta: result.value._meta ?? createPanelErrorMeta(`Missing meta (${label})`),
+    };
+  }
+
+  const reason =
+    result.status === "rejected"
+      ? (result.reason as Error)?.message ?? String(result.reason)
+      : "Unknown panel failure";
+  console.error(`Dashboard panel rejected (${label}):`, reason);
+
+  return {
+    data: fallback,
+    meta: createPanelErrorMeta(reason),
+  };
+}
+
+function PanelFailureBadge({ meta, className }: { meta?: PanelMeta; className?: string }) {
+  if (!meta || meta.ok) {
+    return null;
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "border-destructive/40 bg-destructive/10 px-2 py-0 text-[10px] font-medium uppercase tracking-wide text-destructive",
+        className,
+      )}
+    >
+      Panel failed
+    </Badge>
+  );
+}
+
 function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
-  if (!categories.length) {
+  const visible = categories.filter((category) => category.category_key !== "__UNMAPPED__");
+
+  if (!visible.length) {
     return <DataPlaceholder />;
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2">
-      {categories.map((category) => (
+    <div className="flex gap-3 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {visible.map((category) => (
         <div
           key={category.category_key}
-          className="flex min-w-[220px] items-center gap-3 rounded-2xl border bg-background/80 p-4 shadow-sm"
+          className="flex min-w-[200px] items-center gap-3 rounded-2xl border border-black/5 bg-card px-4 py-3 shadow-sm"
         >
-          <div className="h-12 w-12 overflow-hidden rounded-xl bg-muted/60">
-            <Image
-              src={getIcon(category.icon_url ?? undefined)}
-              alt={category.display_name}
-              width={64}
-              height={64}
-              className="size-full object-contain"
-              unoptimized
-            />
-          </div>
-          <div>
-            <p className="font-medium">{category.display_name}</p>
-            <p className="text-xs text-muted-foreground">
+          <Image
+            src={getIcon(category.icon_url ?? undefined)}
+            alt={category.display_name}
+            width={32}
+            height={32}
+            sizes="(max-width: 640px) 32px, (max-width: 1024px) 32px, 32px"
+            className="h-8 w-8 rounded-lg ring-1 ring-black/5"
+          />
+          <div className="min-w-0">
+            <p className="truncate font-medium tracking-tight">{category.display_name}</p>
+            <p className="text-xs text-muted-foreground tabular-nums">
               {fmtUSD0(category.total_sales)} • {fmtPct0(category.share_pct)}
             </p>
           </div>
@@ -124,78 +174,116 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  noStore();
+
   const params = await (searchParams ?? Promise.resolve({} as DashboardSearchParams));
-  const from = resolveDate(normalizeParam(params.from), DEFAULT_FROM);
-  const to = resolveDate(normalizeParam(params.to), DEFAULT_TO);
+  const from = normalizeParam(params.from) || DEFAULT_FROM;
+  const to = normalizeParam(params.to) || DEFAULT_TO;
 
-  const [kpisRes, monthlyRes, dealersRes, repsRes, categoriesRes, engagementRes] = await Promise.allSettled([
-    getOrgKpisSafe(from, to),
-    getOrgMonthlySafe(from, to),
-    getTopDealersSafe(from, to, 10, 0),
-    getTopRepsSafe(from, to, 10, 0),
-    getCategoryTotalsSafe(from, to),
-    getDealerEngagementSafe(from, to),
-  ]);
+  const envIssues: string[] = [];
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    envIssues.push("NEXT_PUBLIC_SUPABASE_URL");
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    envIssues.push("SUPABASE_SERVICE_ROLE_KEY");
+  }
 
-  const extract = <T,>(
-    result: PromiseSettledResult<SafeResult<T>>,
-    fallback: T,
-    label: string,
-  ): T => {
-    if (result.status === "fulfilled") {
-      if (result.value?.error) {
-        console.error(`Dashboard panel error (${label}):`, result.value.error);
-      }
-      return result.value?.data ?? fallback;
-    }
-    console.error(`Dashboard panel rejected (${label}):`, result.reason);
-    return fallback;
-  };
+  const envWarningMessage = envIssues.length
+    ? `Missing environment variables: ${envIssues.join(", ")}`
+    : null;
+  const envReady = envIssues.length === 0;
 
-  const kpis = extract(
-    kpisRes as PromiseSettledResult<SafeResult<OrgKpis>>,
-    {
-      revenue: 0,
-      unique_dealers: 0,
-      avg_invoice: 0,
-      top_dealer: null,
-      top_dealer_revenue: 0,
-    },
-    "kpis",
-  );
-  const monthly = extract(monthlyRes as PromiseSettledResult<SafeResult<MonthlyPoint[]>>, [], "monthly");
-  const dealerRows = extract(dealersRes as PromiseSettledResult<SafeResult<DealerRow[]>>, [], "dealers");
-  const repRows = extract(repsRes as PromiseSettledResult<SafeResult<RepRow[]>>, [], "reps");
-  const categoryData = extract(categoriesRes as PromiseSettledResult<SafeResult<CategoryRow[]>>, [], "categories");
-  const engagementData = extract(
-    engagementRes as PromiseSettledResult<SafeResult<DealerEngagementRow[]>>,
-    [],
-    "engagement",
-  );
+  let kpisState: PanelState<OrgKpis>;
+  let monthlyState: PanelState<MonthlyPoint[]>;
+  let dealersState: PanelState<DealerRow[]>;
+  let repsState: PanelState<RepRow[]>;
+  let categoriesState: PanelState<CategoryRow[]>;
+  let engagementState: PanelState<DealerEngagementRow[]>;
 
-  const totalRevenue = kpis.revenue ?? 0;
-  const latestEngagement = engagementData.at(-1) ?? {
+  if (envReady) {
+    const panelPromises: [
+      Promise<SafeResult<OrgKpis>>,
+      Promise<SafeResult<MonthlyPoint[]>>,
+      Promise<SafeResult<DealerRow[]>>,
+      Promise<SafeResult<RepRow[]>>,
+      Promise<SafeResult<CategoryRow[]>>,
+      Promise<SafeResult<DealerEngagementRow[]>>,
+    ] = [
+      getOrgKpisSafe(from, to),
+      getOrgMonthlySafe(from, to),
+      getTopDealersSafe(from, to, 10, 0),
+      getTopRepsSafe(from, to, 10, 0),
+      getCategoryTotalsSafe(from, to),
+      getDealerEngagementSafe(from, to),
+    ];
+
+    const [kpisRes, monthlyRes, dealersRes, repsRes, categoriesRes, engagementRes] =
+      await Promise.allSettled(panelPromises);
+
+    kpisState = resolvePanelResult(kpisRes, DEFAULT_KPIS, "sales_org_kpis_v2");
+    monthlyState = resolvePanelResult(monthlyRes, [], "sales_org_monthly_v2");
+    dealersState = resolvePanelResult(dealersRes, [], "sales_org_top_dealers");
+    repsState = resolvePanelResult(repsRes, [], "sales_org_top_reps");
+    categoriesState = resolvePanelResult(categoriesRes, [], "sales_category_totals");
+    engagementState = resolvePanelResult(
+      engagementRes,
+      [],
+      "sales_org_dealer_engagement_trailing_v3",
+    );
+  } else {
+    const meta = createPanelErrorMeta(envWarningMessage ?? "Supabase credentials missing");
+    kpisState = { data: DEFAULT_KPIS, meta };
+    monthlyState = { data: [], meta };
+    dealersState = { data: [], meta };
+    repsState = { data: [], meta };
+    categoriesState = { data: [], meta };
+    engagementState = { data: [], meta };
+  }
+
+  console.log("[dash-panels]", {
+    from,
+    to,
+    kpis: kpisState.meta,
+    monthly: monthlyState.meta,
+    dealers: dealersState.meta,
+    reps: repsState.meta,
+    cats: categoriesState.meta,
+    engage: engagementState.meta,
+  });
+
+  const totalRevenue = kpisState.data.revenue ?? 0;
+  const latestEngagement = engagementState.data.at(-1) ?? {
     active_cnt: 0,
     inactive_cnt: 0,
     total_assigned: 0,
     active_pct: 0,
   };
 
-  const sortedCategories = [...categoryData].sort((a, b) => b.total_sales - a.total_sales);
+  const filteredCategories = categoriesState.data.filter(
+    (category) => category.category_key !== "__UNMAPPED__",
+  );
+  const sortedCategories = [...filteredCategories].sort((a, b) => b.total_sales - a.total_sales);
   const topProductsTotalPages = Math.max(1, Math.ceil(sortedCategories.length / TOP_PRODUCTS_PAGE_SIZE));
   const topProductsPageParam = parseInt(normalizeParam(params.topProductsPage) ?? "1", 10);
   const currentTopProductsPage = Number.isNaN(topProductsPageParam)
     ? 1
     : Math.min(Math.max(topProductsPageParam, 1), topProductsTotalPages);
 
+  const envBanner = envWarningMessage ? (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+      {envWarningMessage}. Dashboard data calls are disabled.
+    </div>
+  ) : null;
+
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-[1200px] space-y-10 px-4 pb-12 sm:px-6 lg:px-8">
+      {envBanner}
       <PageHeader
         title="CPF Floors MBIC Overview"
         description="High-level KPIs across sales, marketing, and customer sentiment."
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
         <KpiCard
           title="Revenue YTD"
           value={fmtUSD0(totalRevenue)}
@@ -205,7 +293,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             description: "No Year-over-Year delta • data available from 2025-01-01 to 2025-09-30",
           }}
           icon={TrendingUp}
-          className="xl:col-span-2"
+          statusBadge={<PanelFailureBadge meta={kpisState.meta} />}
         />
         <KpiCard
           title="Active Dealers"
@@ -216,6 +304,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             description: `${fmtPct0(latestEngagement.active_pct)} active`,
           }}
           icon={Users}
+          statusBadge={<PanelFailureBadge meta={engagementState.meta} />}
         />
         <KpiCard
           title="Growth Rate"
@@ -225,29 +314,31 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2 border-none bg-gradient-to-br from-background to-muted/60">
-          <CardHeader className="flex flex-row items-center justify-between">
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm xl:col-span-2">
+          <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div>
-              <CardTitle className="font-montserrat text-xl">Monthly Revenue Trend</CardTitle>
-              <p className="text-xs text-muted-foreground">Real-time reporting from Supabase sales data.</p>
+              <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Monthly Revenue Trend</CardTitle>
+              <p className="text-sm text-muted-foreground">Real-time reporting from Supabase sales data.</p>
             </div>
-            <Badge variant="secondary" className="bg-primary/10 text-primary">
-              <LineChartIcon className="mr-1 size-3" />
-              Gradient View
-            </Badge>
+            <PanelFailureBadge meta={monthlyState.meta} />
           </CardHeader>
-          <CardContent>
-            <MonthlyRevenueTrend data={monthly} />
+          <CardContent className="p-4 sm:p-6">
+            <MonthlyRevenueTrend data={monthlyState.data} />
           </CardContent>
         </Card>
 
-        <Card className="border-none bg-gradient-to-br from-background to-muted/60">
-          <CardHeader>
-            <CardTitle className="font-montserrat text-xl">Top Products</CardTitle>
-            <p className="text-xs text-muted-foreground">Leading categories by revenue share.</p>
+        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+          <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:p-6">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Top Products</CardTitle>
+                <p className="text-sm text-muted-foreground">Leading categories by revenue share.</p>
+              </div>
+              <PanelFailureBadge meta={categoriesState.meta} />
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             <TopProductsGrid
               products={sortedCategories}
               currentPage={currentTopProductsPage}
@@ -258,117 +349,139 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </Card>
       </section>
 
-      <Card className="border-none bg-background">
-        <CardHeader>
-          <CardTitle className="font-montserrat text-xl">Category Engagement</CardTitle>
-          <p className="text-xs text-muted-foreground">Every active segment this period.</p>
+      <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+        <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+          <div>
+            <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Category Engagement</CardTitle>
+            <p className="text-sm text-muted-foreground">Every active segment this period.</p>
+          </div>
+          <PanelFailureBadge meta={categoriesState.meta} />
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           <CategoryCarousel categories={sortedCategories} />
         </CardContent>
       </Card>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-none bg-background">
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+          <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div>
-              <CardTitle className="font-montserrat text-xl">Top Dealers by Revenue</CardTitle>
-              <p className="text-xs text-muted-foreground">Year-to-date totals with latest monthly averages.</p>
+              <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Top Dealers by Revenue</CardTitle>
+              <p className="text-sm text-muted-foreground">Year-to-date totals with latest monthly averages.</p>
             </div>
+            <PanelFailureBadge meta={dealersState.meta} />
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            {dealerRows.length ? (
+          <CardContent className="p-0">
+            {dealersState.data.length ? (
               <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>Dealer</TableHead>
-                      <TableHead>Rep</TableHead>
-                      <TableHead className="text-right">Revenue YTD</TableHead>
-                      <TableHead className="text-right">Monthly Avg</TableHead>
-                      <TableHead className="text-right">Share %</TableHead>
+                <Table className="min-w-[640px]">
+                  <TableHeader className="sticky top-0 z-10 bg-card">
+                    <TableRow className="bg-card">
+                      <TableHead className="sticky top-0 bg-card">#</TableHead>
+                      <TableHead className="sticky top-0 bg-card">Dealer</TableHead>
+                      <TableHead className="sticky top-0 bg-card">Rep</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Revenue YTD</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Monthly Avg</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Share %</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dealerRows.map((dealer, index) => {
+                    {dealersState.data.map((dealer, index) => {
                       const revenue = dealer.revenue ?? 0;
                       const share = dealer.share_pct ?? (totalRevenue ? (revenue / totalRevenue) * 100 : 0);
                       return (
-                        <TableRow key={`${dealer.dealer_name}-${index}`}>
+                        <TableRow key={`${dealer.dealer_name}-${index}`} className="h-12 odd:bg-muted/30">
                           <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
                           <TableCell className="font-medium">{dealer.dealer_name}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.rep_initials ?? "—"}</TableCell>
-                          <TableCell className="text-right">{fmtUSD0(revenue)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{fmtUSD0(dealer.monthly_avg ?? 0)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{fmtPct0(share)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{fmtUSD0(revenue)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {fmtUSD0(dealer.monthly_avg ?? 0)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">{fmtPct0(share)}</TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
-                <p className="mt-2 text-right text-[10px] uppercase tracking-wide text-muted-foreground">Scroll →</p>
+                <p className="px-4 pb-4 text-right text-xs uppercase tracking-wide text-muted-foreground">
+                  Scroll →
+                </p>
               </>
             ) : (
-              <DataPlaceholder />
+              <div className="px-4 pb-4">
+                <DataPlaceholder />
+              </div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-none bg-background">
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+          <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div>
-              <CardTitle className="font-montserrat text-xl">Top Sales Reps by Revenue</CardTitle>
-              <p className="text-xs text-muted-foreground">Ranked by year-to-date performance.</p>
+              <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Top Sales Reps by Revenue</CardTitle>
+              <p className="text-sm text-muted-foreground">Ranked by year-to-date performance.</p>
             </div>
+            <PanelFailureBadge meta={repsState.meta} />
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            {repRows.length ? (
+          <CardContent className="p-0">
+            {repsState.data.length ? (
               <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>Rep</TableHead>
-                      <TableHead className="text-right">Revenue YTD</TableHead>
-                      <TableHead className="text-right">Monthly Avg</TableHead>
-                      <TableHead className="text-right">Active</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="text-right">Active %</TableHead>
+                <Table className="min-w-[720px]">
+                  <TableHeader className="sticky top-0 z-10 bg-card">
+                    <TableRow className="bg-card">
+                      <TableHead className="sticky top-0 bg-card">#</TableHead>
+                      <TableHead className="sticky top-0 bg-card">Rep</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Revenue YTD</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Monthly Avg</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Active</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Total</TableHead>
+                      <TableHead className="sticky top-0 bg-card text-right">Active %</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {repRows.map((rep, index) => (
-                      <TableRow key={`${rep.rep_id}-${index}`}>
+                    {repsState.data.map((rep, index) => (
+                      <TableRow key={`${rep.rep_id}-${index}`} className="h-12 odd:bg-muted/30">
                         <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
                         <TableCell className="font-medium">{rep.rep_name}</TableCell>
-                        <TableCell className="text-right">{fmtUSD0(rep.revenue ?? 0)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{fmtUSD0(rep.monthly_avg ?? 0)}</TableCell>
-                        <TableCell className="text-right">{formatNumber(rep.active_customers ?? 0)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{formatNumber(rep.total_customers ?? 0)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">
+                        <TableCell className="text-right tabular-nums">{fmtUSD0(rep.revenue ?? 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {fmtUSD0(rep.monthly_avg ?? 0)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatNumber(rep.active_customers ?? 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {formatNumber(rep.total_customers ?? 0)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
                           {rep.active_pct == null ? "—" : fmtPct0(rep.active_pct)}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-                <p className="mt-2 text-right text-[10px] uppercase tracking-wide text-muted-foreground">Scroll →</p>
+                <p className="px-4 pb-4 text-right text-xs uppercase tracking-wide text-muted-foreground">
+                  Scroll →
+                </p>
               </>
             ) : (
-              <DataPlaceholder />
+              <div className="px-4 pb-4">
+                <DataPlaceholder />
+              </div>
             )}
           </CardContent>
         </Card>
       </section>
 
-      <Card className="border-none bg-background">
-        <CardHeader>
-          <CardTitle className="font-montserrat text-xl">Dealer Engagement Heatmap</CardTitle>
-          <p className="text-xs text-muted-foreground">Trailing monthly activity excluding distribution partners.</p>
+      <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+        <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+          <div>
+            <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Dealer Engagement Heatmap</CardTitle>
+            <p className="text-sm text-muted-foreground">Trailing monthly activity excluding distribution partners.</p>
+          </div>
+          <PanelFailureBadge meta={engagementState.meta} />
         </CardHeader>
-        <CardContent>
-          <DealerHeatmap data={engagementData ?? []} />
+        <CardContent className="p-4 sm:p-6">
+          <DealerHeatmap data={engagementState.data ?? []} />
         </CardContent>
       </Card>
     </div>
