@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 import { ArrowUpRight, TrendingUp, Users } from "lucide-react";
 
@@ -46,6 +47,7 @@ export const runtime = "nodejs";
 
 const DEFAULT_FROM = "2025-01-01";
 const DEFAULT_TO = "2025-10-01";
+const TOP_COLLECTIONS_PAGE_SIZE = 5;
 const DEFAULT_KPIS: OrgKpis = {
   revenue: 0,
   unique_dealers: 0,
@@ -66,6 +68,20 @@ type PanelState<T> = {
   data: T;
   meta: PanelMeta;
 };
+
+function buildPaginationHref(params: DashboardSearchParams, key: string, targetPage: number) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([paramKey, value]) => {
+    if (!value || paramKey === key) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => query.append(paramKey, entry));
+    } else {
+      query.set(paramKey, value);
+    }
+  });
+  query.set(key, String(targetPage));
+  return `?${query.toString()}`;
+}
 
 function normalizeParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) {
@@ -173,20 +189,25 @@ function TopCollectionsList({ collections }: { collections: TopCollectionRow[] }
 
   return (
     <div className="space-y-3">
-      {collections.map((item) => (
+      {collections.map((item, index) => (
         <div
-          key={item.collection_key}
-          className="flex items-center justify-between gap-3 rounded-xl border border-black/5 bg-card/80 px-4 py-3 shadow-sm"
+          key={`${item.collection_key}-${index}`}
+          className="rounded-xl border border-black/5 bg-card/90 px-4 py-3 shadow-sm"
         >
-          <div className="min-w-0">
-            <p className="truncate font-medium tracking-tight">{item.collection_name}</p>
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {fmtUSD0(item.lifetime_sales)} lifetime
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-medium tracking-tight">{item.collection_name}</p>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {fmtUSD0(item.lifetime_sales)} lifetime
+              </p>
+            </div>
+            <Badge
+              variant="secondary"
+              className="rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wide"
+            >
+              {fmtPct0(item.share_pct)} share
+            </Badge>
           </div>
-          <Badge variant="secondary" className="rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wide">
-            {fmtPct0(item.share_pct)} share
-          </Badge>
         </div>
       ))}
     </div>
@@ -310,7 +331,22 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     (category) => category.category_key !== "__UNMAPPED__",
   );
   const sortedCategories = [...filteredCategories].sort((a, b) => b.total_sales - a.total_sales);
-  const topCollections = collectionsState.data.slice(0, 10);
+  const sortedCollections = [...collectionsState.data].sort(
+    (a, b) => (b.lifetime_sales ?? 0) - (a.lifetime_sales ?? 0),
+  );
+  const totalCollectionsPages = Math.max(
+    1,
+    Math.ceil(sortedCollections.length / TOP_COLLECTIONS_PAGE_SIZE),
+  );
+  const collectionsPageParam = parseInt(normalizeParam(params.collectionsPage) ?? "1", 10);
+  const currentCollectionsPage = Number.isNaN(collectionsPageParam)
+    ? 1
+    : Math.min(Math.max(collectionsPageParam, 1), totalCollectionsPages);
+  const collectionsStart = (currentCollectionsPage - 1) * TOP_COLLECTIONS_PAGE_SIZE;
+  const pagedCollections = sortedCollections.slice(
+    collectionsStart,
+    collectionsStart + TOP_COLLECTIONS_PAGE_SIZE,
+  );
   const ytdTotal = monthlyState.data.reduce((sum, row) => sum + (row.total ?? 0), 0);
 
   const grossRevenueSubtitle = `— • No Year-over-Year delta • data available from ${from} to ${to}`;
@@ -336,7 +372,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   ) : null;
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-10 px-4 pb-12 sm:px-6 lg:px-8">
+    <div className="space-y-10">
       {envBanner}
       <PageHeader
         title="CPF Floors MBIC Overview"
@@ -374,7 +410,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </section>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm xl:col-span-2">
+        <Card className="flex h-full flex-col rounded-2xl border border-black/5 bg-card shadow-sm xl:col-span-2">
           <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div>
               <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Monthly Revenue Trend</CardTitle>
@@ -382,18 +418,18 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </div>
             <PanelFailureBadge meta={monthlyState.meta} />
           </CardHeader>
-          <CardContent className="space-y-4 p-4 sm:p-6">
-            <div>
+          <CardContent className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
               <p className="text-xs uppercase tracking-wide text-muted-foreground/80">Year to date</p>
-              <p className="font-montserrat text-lg font-semibold tabular-nums sm:text-xl">
-                {fmtUSD0(ytdTotal)}
-              </p>
+              <p className="font-montserrat text-lg font-semibold tabular-nums sm:text-xl">{fmtUSD0(ytdTotal)}</p>
             </div>
-            <MonthlyRevenueTrend data={monthlyState.data} />
+            <div className="flex-1">
+              <MonthlyRevenueTrend data={monthlyState.data} />
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+        <Card className="flex h-full flex-col rounded-2xl border border-black/5 bg-card shadow-sm">
           <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:p-6">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -403,8 +439,37 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <PanelFailureBadge meta={collectionsState.meta} />
             </div>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <TopCollectionsList collections={topCollections} />
+          <CardContent className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+            <TopCollectionsList collections={pagedCollections} />
+            {totalCollectionsPages > 1 ? (
+              <div className="mt-auto flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                <Link
+                  href={buildPaginationHref(params, "collectionsPage", Math.max(1, currentCollectionsPage - 1))}
+                  className={cn(
+                    "rounded-full border border-black/10 px-3 py-1 transition hover:bg-muted",
+                    currentCollectionsPage === 1 && "pointer-events-none opacity-40",
+                  )}
+                  aria-disabled={currentCollectionsPage === 1}
+                  data-disabled={currentCollectionsPage === 1}
+                >
+                  Previous
+                </Link>
+                <span>
+                  Page {currentCollectionsPage} / {totalCollectionsPages}
+                </span>
+                <Link
+                  href={buildPaginationHref(params, "collectionsPage", Math.min(totalCollectionsPages, currentCollectionsPage + 1))}
+                  className={cn(
+                    "rounded-full border border-black/10 px-3 py-1 transition hover:bg-muted",
+                    currentCollectionsPage >= totalCollectionsPages && "pointer-events-none opacity-40",
+                  )}
+                  aria-disabled={currentCollectionsPage >= totalCollectionsPages}
+                  data-disabled={currentCollectionsPage >= totalCollectionsPages}
+                >
+                  Next
+                </Link>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </section>
@@ -419,6 +484,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
           <CategoryCarousel categories={sortedCategories} />
+          {sortedCategories.length > 3 ? (
+            <p className="mt-2 text-right text-[11px] uppercase tracking-wide text-muted-foreground/70">
+              Scroll →
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
