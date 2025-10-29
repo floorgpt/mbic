@@ -8,6 +8,9 @@ import {
   Line,
   XAxis,
   YAxis,
+  type ValueType,
+  type NameType,
+  type Payload,
 } from "recharts";
 
 import {
@@ -95,11 +98,12 @@ export function EconomicsChart({ data }: { data: EconomicsPoint[] }) {
           cursor={{ strokeDasharray: "4 4" }}
           content={
             <ChartTooltipContent
-              formatter={(value: number, name, item) => {
-                if (item.dataKey === "margin_pct") {
-                  return fmtPct0(Number(value ?? 0));
+              formatter={(value: ValueType, name: NameType, item: Payload<ValueType, NameType>) => {
+                const numericValue = Number(value ?? 0);
+                if (item?.dataKey === "margin_pct") {
+                  return fmtPct0(numericValue);
                 }
-                return fmtUSD0(Number(value ?? 0));
+                return fmtUSD0(numericValue);
               }}
               labelFormatter={(label) => `Month of ${formatMonthLabel(label)}`}
             />
