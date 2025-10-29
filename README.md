@@ -119,6 +119,36 @@ The Sales page uses enriched helper functions because it needs per-rep drill dow
 
 All Sales helpers sit in `lib/mbic-sales.ts` / `lib/db/sales.ts` because they touch additional SQL views. They continue to share the same `getSupabaseAdminClient` factory and numeric coercion utilities to avoid drift.
 
+### Sales Operations (`app/(dashboard)/sales-ops/page.tsx`)
+
+The Sales Ops overview mirrors the guardrails used by the main dashboard: `dynamic = 'force-dynamic'`, Node runtime, and `Promise.allSettled` with a `[salesops-panels]` log that emits `{ ok, count, err? }` for every panel render. Data access lives in `lib/mbic-supabase-salesops.ts`, which exposes typed safe helpers that wrap `tryServerSafe` and normalise Supabase RPC output.
+
+| Helper | Supabase RPC | Parameters (all emit both `from`/`to` and `from_date`/`to_date`) | Description |
+| --- | --- | --- | --- |
+| `getCategoryKpis` | `sales_ops_category_kpis` | `from`, `to` | Category-level revenue, price, COGS, gross margin/profit. |
+| `getCategoryKpisMonthly` | `sales_ops_category_kpis_monthly` | `from`, `to` | Monthly time-series of the same economics, later bucketed client-side. |
+| `getFillRate` | `sales_ops_fill_rate` | `from`, `to` | Returns `%` fill rate; UI presents as KPI card. |
+| `getImportLeadTime` | `sales_ops_import_lead_time` | `from`, `to` | Average lead-time in days. |
+| `getForecastAccuracy` | `sales_ops_forecast_accuracy` | `from`, `to` | Forecast accuracy percentage. |
+| `getInventoryTurnover` | `sales_ops_inventory_turnover` | `from`, `to` | Inventory turnover ratio (ITR). |
+| `getDealerBounce` | `sales_ops_dealer_bounce_rate` | `from`, `to` | Dealer bounce percentage. |
+| `getReportsByMonth` | `ops_reports_made_by_month` | `from`, `to` | Monthly Ops report count. |
+| `getCommConsistency` | `ops_comm_consistency_index` | `from`, `to` | Comms consistency metric (percentage). |
+| `getCollectionsLeaderboard` | `sales_ops_kpis_by_collection` | `from`, `to` | Top collections by revenue/profit for pills + drawer. |
+| `getCollectionsMonthly` | `sales_ops_kpis_monthly_by_collection` | `from`, `to` | Collection economics timeseries (used for margin delta badge). |
+| `getCollectionByDealer` | `sales_ops_collections_by_dealer` | `p_collection`, `from`, `to` | Dealer drill-down for the drawer API (`/api/collection-by-dealer`). |
+| `getFutureOppsOpen` | `list_future_sale_opps_open` | `from`, `to` | Actionable future opportunities table. |
+| `getIncomingStockByCollection` | `list_incoming_stock_by_collection` | `from`, `to` | Incoming stock schedule table. |
+
+UI components live in `components/sales-ops/`:
+
+- `range-picker.tsx` — compact YTD/QTD/MTD/custom selector that syncs query parameters.
+- `economics-chart.tsx` — Recharts dual-axis area/line chart for revenue vs. gross margin.
+- `top-collections.tsx` — Pill list + drawer with CSV export backed by `/api/collection-by-dealer`.
+- `reports-timeline.tsx` — Monthly Ops report bar chart with typed tooltip formatter.
+
+Loading states are handled via `app/(dashboard)/sales-ops/loading.tsx`, which mirrors the shimmer styling used elsewhere. When either Supabase environment variable is missing, a banner displays and every panel meta is forced to `{ ok: false }`, keeping the UI in a consistent “Thinking…” state without firing RPCs.
+
 ### Failure Handling & Logging
 
 | Layer | Behaviour | Output |

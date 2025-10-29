@@ -219,9 +219,18 @@ function mapSafeResult<TRow>(
   };
 }
 
+function buildDateParams(from: string, to: string) {
+  return {
+    from,
+    to,
+    from_date: from,
+    to_date: to,
+  };
+}
+
 export async function getCategoryKpis(from: string, to: string): Promise<SafeResult<CategoryKpiRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_category_kpis", { from, to }),
+    callRpc<RawRow>("sales_ops_category_kpis", buildDateParams(from, to)),
     "sales_ops_category_kpis",
     [],
   );
@@ -230,7 +239,7 @@ export async function getCategoryKpis(from: string, to: string): Promise<SafeRes
 
 export async function getCategoryKpisMonthly(from: string, to: string): Promise<SafeResult<CategoryKpiMonthlyRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_category_kpis_monthly", { from, to }),
+    callRpc<RawRow>("sales_ops_category_kpis_monthly", buildDateParams(from, to)),
     "sales_ops_category_kpis_monthly",
     [],
   );
@@ -239,7 +248,7 @@ export async function getCategoryKpisMonthly(from: string, to: string): Promise<
 
 export async function getFillRate(from: string, to: string): Promise<SafeResult<FillRateRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_fill_rate", { from, to }),
+    callRpc<RawRow>("sales_ops_fill_rate", buildDateParams(from, to)),
     "sales_ops_fill_rate",
     [],
   );
@@ -248,7 +257,7 @@ export async function getFillRate(from: string, to: string): Promise<SafeResult<
 
 export async function getImportLeadTime(from: string, to: string): Promise<SafeResult<ImportLeadTimeRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_import_lead_time", { from, to }),
+    callRpc<RawRow>("sales_ops_import_lead_time", buildDateParams(from, to)),
     "sales_ops_import_lead_time",
     [],
   );
@@ -257,7 +266,7 @@ export async function getImportLeadTime(from: string, to: string): Promise<SafeR
 
 export async function getForecastAccuracy(from: string, to: string): Promise<SafeResult<ForecastAccuracyRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_forecast_accuracy", { from, to }),
+    callRpc<RawRow>("sales_ops_forecast_accuracy", buildDateParams(from, to)),
     "sales_ops_forecast_accuracy",
     [],
   );
@@ -266,7 +275,7 @@ export async function getForecastAccuracy(from: string, to: string): Promise<Saf
 
 export async function getInventoryTurnover(from: string, to: string): Promise<SafeResult<InventoryTurnoverRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_inventory_turnover", { from, to }),
+    callRpc<RawRow>("sales_ops_inventory_turnover", buildDateParams(from, to)),
     "sales_ops_inventory_turnover",
     [],
   );
@@ -275,7 +284,7 @@ export async function getInventoryTurnover(from: string, to: string): Promise<Sa
 
 export async function getDealerBounce(from: string, to: string): Promise<SafeResult<DealerBounceRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_dealer_bounce_rate", { from, to }),
+    callRpc<RawRow>("sales_ops_dealer_bounce_rate", buildDateParams(from, to)),
     "sales_ops_dealer_bounce_rate",
     [],
   );
@@ -284,7 +293,7 @@ export async function getDealerBounce(from: string, to: string): Promise<SafeRes
 
 export async function getReportsByMonth(from: string, to: string): Promise<SafeResult<ReportsByMonthRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("ops_reports_made_by_month", { from, to }),
+    callRpc<RawRow>("ops_reports_made_by_month", buildDateParams(from, to)),
     "ops_reports_made_by_month",
     [],
   );
@@ -293,7 +302,7 @@ export async function getReportsByMonth(from: string, to: string): Promise<SafeR
 
 export async function getCommConsistency(from: string, to: string): Promise<SafeResult<CommConsistencyRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("ops_comm_consistency_index", { from, to }),
+    callRpc<RawRow>("ops_comm_consistency_index", buildDateParams(from, to)),
     "ops_comm_consistency_index",
     [],
   );
@@ -302,7 +311,7 @@ export async function getCommConsistency(from: string, to: string): Promise<Safe
 
 export async function getCollectionsLeaderboard(from: string, to: string): Promise<SafeResult<CollectionLeaderboardRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_kpis_by_collection", { from, to }),
+    callRpc<RawRow>("sales_ops_kpis_by_collection", buildDateParams(from, to)),
     "sales_ops_kpis_by_collection",
     [],
   );
@@ -311,7 +320,7 @@ export async function getCollectionsLeaderboard(from: string, to: string): Promi
 
 export async function getCollectionsMonthly(from: string, to: string): Promise<SafeResult<CollectionMonthlyRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_kpis_monthly_by_collection", { from, to }),
+    callRpc<RawRow>("sales_ops_kpis_monthly_by_collection", buildDateParams(from, to)),
     "sales_ops_kpis_monthly_by_collection",
     [],
   );
@@ -324,7 +333,10 @@ export async function getCollectionByDealer(
   to: string,
 ): Promise<SafeResult<CollectionDealerRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_collections_by_dealer", { p_collection: collection, from, to }),
+    callRpc<RawRow>("sales_ops_collections_by_dealer", {
+      p_collection: collection,
+      ...buildDateParams(from, to),
+    }),
     "sales_ops_collections_by_dealer",
     [],
   );
@@ -333,7 +345,7 @@ export async function getCollectionByDealer(
 
 export async function getFutureOppsOpen(from: string, to: string): Promise<SafeResult<FutureOpportunityRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("list_future_sale_opps_open", { from, to }),
+    callRpc<RawRow>("list_future_sale_opps_open", buildDateParams(from, to)),
     "list_future_sale_opps_open",
     [],
   );
@@ -342,7 +354,7 @@ export async function getFutureOppsOpen(from: string, to: string): Promise<SafeR
 
 export async function getIncomingStockByCollection(from: string, to: string): Promise<SafeResult<IncomingStockRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("list_incoming_stock_by_collection", { from, to }),
+    callRpc<RawRow>("list_incoming_stock_by_collection", buildDateParams(from, to)),
     "list_incoming_stock_by_collection",
     [],
   );

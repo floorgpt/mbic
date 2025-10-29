@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Boxes,
   Home,
   LineChart,
   LogOut,
@@ -18,6 +19,11 @@ export const DASHBOARD_NAV = [
     label: "Sales",
     href: "/sales",
     icon: BarChart3,
+  },
+  {
+    label: "Sales Operations",
+    href: "/sales-ops",
+    icon: Boxes,
   },
   {
     label: "Marketing",
