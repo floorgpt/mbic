@@ -115,14 +115,26 @@ The Sales Ops equivalent lives at `app/api/diag-salesops/route.ts`. It reuses th
   "ok": true,
   "from": "2025-01-01",
   "to": "2025-10-01",
-  "summary": [
-    { "label": "sales_ops_category_kpis", "ok": true, "count": 9 },
-    { "label": "sales_ops_fill_rate", "ok": true, "count": 1 }
+  "results": [
+    {
+      "label": "sales_ops_category_kpis",
+      "ok": true,
+      "count": 9,
+      "meta": { "ok": true, "count": 9 },
+      "sample": [{ "...": "trimmed" }]
+    },
+    {
+      "label": "sales_ops_fill_rate",
+      "ok": true,
+      "count": 1,
+      "meta": { "ok": true, "count": 1 },
+      "sample": [{ "...": "trimmed" }]
+    }
   ]
 }
 ```
 
-Hit the route with optional `from`/`to` query params, e.g. `GET /api/diag-salesops?from=2025-04-01&to=2025-06-30`, to validate Supabase connectivity for every Sales Ops panel in one request.
+Hit the route with optional `from`/`to` query params, e.g. `GET /api/diag-salesops?from=2025-04-01&to=2025-06-30`, to validate Supabase connectivity for every Sales Ops panel in one request. Each entry includes the SafeResult meta plus a single-row sample payload to speed up QA.
 
 ### Sales Performance (`app/(dashboard)/sales/page.tsx`)
 
