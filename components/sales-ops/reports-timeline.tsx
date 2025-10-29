@@ -2,6 +2,11 @@
 
 import * as React from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import type {
+  Formatter,
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
 
 import {
   ChartContainer,
@@ -29,6 +34,15 @@ function formatMonthLabel(value: string) {
     month: "short",
   });
 }
+
+const formatReports: Formatter<ValueType, NameType> = (value) => {
+  const numeric = Array.isArray(value)
+    ? Number(value[0] ?? 0)
+    : typeof value === "number"
+      ? value
+      : Number(value ?? 0);
+  return `${numeric} reports`;
+};
 
 export function ReportsTimeline({ data }: { data: ReportsPoint[] }) {
   const safeData = React.useMemo(
@@ -60,7 +74,7 @@ export function ReportsTimeline({ data }: { data: ReportsPoint[] }) {
           cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
           content={
             <ChartTooltipContent
-              formatter={(value: number) => `${value ?? 0} reports`}
+              formatter={formatReports}
               labelFormatter={(label) => `Month of ${formatMonthLabel(label)}`}
             />
           }
