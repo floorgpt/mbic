@@ -106,6 +106,24 @@ open http://localhost:3000/
 
 This route (`app/api/diag/route.ts`) exists for QA and external integrations. It calls the **non-safe** helpers (`getOrgKpis`, `getOrgMonthly`, etc.) which throw on error instead of returning fallbacks. The route mirrors the same input defaults and is the quickest way to confirm Supabase data availability.
 
+### `/api/diag-salesops`
+
+The Sales Ops equivalent lives at `app/api/diag-salesops/route.ts`. It reuses the Safe helpers listed above (`getCategoryKpis`, `getFillRate`, `getInventoryTurnover`, etc.) and returns both the raw payload (`data`, `_meta`) and a concise `summary` array:
+
+```json
+{
+  "ok": true,
+  "from": "2025-01-01",
+  "to": "2025-10-01",
+  "summary": [
+    { "label": "sales_ops_category_kpis", "ok": true, "count": 9 },
+    { "label": "sales_ops_fill_rate", "ok": true, "count": 1 }
+  ]
+}
+```
+
+Hit the route with optional `from`/`to` query params, e.g. `GET /api/diag-salesops?from=2025-04-01&to=2025-06-30`, to validate Supabase connectivity for every Sales Ops panel in one request.
+
 ### Sales Performance (`app/(dashboard)/sales/page.tsx`)
 
 The Sales page uses enriched helper functions because it needs per-rep drill downs:
