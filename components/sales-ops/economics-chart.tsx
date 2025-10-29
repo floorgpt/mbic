@@ -1,17 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  XAxis,
-  YAxis,
-  type ValueType,
-  type NameType,
-  type Payload,
-} from "recharts";
+import { Area, AreaChart, CartesianGrid, Line, XAxis, YAxis } from "recharts";
 
 import {
   ChartContainer,
@@ -98,7 +88,7 @@ export function EconomicsChart({ data }: { data: EconomicsPoint[] }) {
           cursor={{ strokeDasharray: "4 4" }}
           content={
             <ChartTooltipContent
-              formatter={(value: ValueType, name: NameType, item: Payload<ValueType, NameType>) => {
+              formatter={(value: unknown, name, item) => {
                 const numericValue = Number(value ?? 0);
                 if (item?.dataKey === "margin_pct") {
                   return fmtPct0(numericValue);
