@@ -5,7 +5,6 @@ import "server-only";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { tryServerSafe, type SafeResult } from "@/lib/utils";
 import {
-  type ProductCategoryCollectionMapRow,
   type ProductCategoryRow,
   type SalesRepRow,
   type CustomersDemoRow,
@@ -69,17 +68,22 @@ function mapCategories(rows: ProductCategoryRow[] | null): CategoryOption[] {
     }));
 }
 
-function mapCollections(rows: ProductCategoryCollectionMapRow[] | null): CollectionOption[] {
+type CollectionRow = {
+  collection_key: string | null;
+};
+
+function mapCollections(rows: CollectionRow[] | null): CollectionOption[] {
   if (!rows?.length) return [];
   const seen = new Set<string>();
   const result: CollectionOption[] = [];
   for (const row of rows) {
-    if (!row.collection_key) continue;
-    if (seen.has(row.collection_key)) continue;
-    seen.add(row.collection_key);
+    const key = row.collection_key?.trim();
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
     result.push({
-      key: row.collection_key,
-      label: row.collection_label ?? row.collection_key,
+      key,
+      label: key,
     });
   }
   return result;
@@ -199,14 +203,13 @@ export async function getCollectionsByCategory(
   }
 
   const supabase = getSupabaseAdminClient();
-  const normalized = categoryKey.trim();
-  const pattern = normalized.toLowerCase();
+  const normalized = categoryKey.trim().toLowerCase();
   const safe = await tryServerSafe(
     (async () => {
       const { data: matchedCategory, error: categoryLookupError } = await supabase
         .from("product_categories")
         .select("category_key")
-        .ilike("category_key", pattern)
+        .ilike("category_key", normalized)
         .limit(1)
         .maybeSingle<{ category_key: string }>();
 
@@ -218,7 +221,7 @@ export async function getCollectionsByCategory(
 
       const { data, error } = await supabase
         .from("product_category_collection_map")
-        .select("category_key, collection_key, collection_label")
+        .select("collection_key")
         .ilike("category_key", resolvedKey)
         .order("collection_key", { ascending: true });
 
@@ -226,11 +229,7 @@ export async function getCollectionsByCategory(
         ensureSupabaseError("getCollectionsByCategory", error);
       }
 
-      const mapped = mapCollections(data ?? []);
-      if (!mapped.length) {
-        throw new Error(`No collections found for category "${resolvedKey}"`);
-      }
-      return mapped;
+      return mapCollections(data as CollectionRow[] | null);
     })(),
     `forms:getCollections:${normalized}`,
     [],

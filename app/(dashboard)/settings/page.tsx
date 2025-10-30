@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
+import { WebhookModeToggle } from "@/components/forms/webhook-mode-toggle";
 import { getFormsWebhookSettings } from "@/lib/forms/settings";
 import {
   Tabs,
@@ -209,34 +210,8 @@ export default async function SettingsPage() {
                 n8n Webhooks
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Modo activo
-                </label>
-                <Input value={formsSettings.mode.toUpperCase()} readOnly className="font-mono" />
-                <p className="text-xs text-muted-foreground">
-                  Determina qué webhook recibe las notificaciones del formulario público.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Webhook Test
-                </label>
-                <div className="flex items-center gap-2">
-                  <Input value={formsSettings.urls.test} readOnly className="font-mono" />
-                  <CopyButton value={formsSettings.urls.test} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Webhook Prod
-                </label>
-                <div className="flex items-center gap-2">
-                  <Input value={formsSettings.urls.prod} readOnly className="font-mono" />
-                  <CopyButton value={formsSettings.urls.prod} />
-                </div>
-              </div>
+            <CardContent className="space-y-4">
+              <WebhookModeToggle initialSettings={formsSettings} />
             </CardContent>
           </Card>
         </TabsContent>
