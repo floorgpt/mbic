@@ -532,8 +532,8 @@ export function LossOpportunityForm({
             </SelectTrigger>
             <SelectContent>
               {colorsState.data.map((color) => (
-                <SelectItem key={color.name} value={color.name}>
-                  {color.name}
+                <SelectItem key={color.value} value={color.value}>
+                  {color.label}
                 </SelectItem>
               ))}
             </SelectContent>

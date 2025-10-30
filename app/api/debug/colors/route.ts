@@ -15,9 +15,10 @@ export async function GET(request: Request) {
 
   try {
     const supabase = getSupabaseAdminClient();
-    const { data, error } = await supabase.rpc("get_colors_by_collection_v2", {
-      p_collection: collection,
-    });
+    const { data, error } = await supabase.rpc(
+      "get_colors_by_collection_v2" as never,
+      { p_collection: collection } as never,
+    );
 
     if (error) {
       throw error;

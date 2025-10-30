@@ -21,7 +21,8 @@ export type CollectionOption = {
 };
 
 export type ColorOption = {
-  name: string;
+  value: string;
+  label: string;
 };
 
 export type LossReason = "no_stock" | "price" | "competitor" | "cancelled" | "other";

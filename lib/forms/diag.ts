@@ -98,7 +98,7 @@ export async function runFormsDiagnostics(options?: { dryRun?: boolean }): Promi
   if (collectionKey) {
     const colors = await getColorsByCollection(collectionKey);
     checks.push(fromSafeResult(`colors-${collectionKey}`, colors));
-    colorName = colors.data[0]?.name ?? null;
+    colorName = colors.data[0]?.value ?? colors.data[0]?.label ?? null;
   } else {
     checks.push({
       label: "colors",

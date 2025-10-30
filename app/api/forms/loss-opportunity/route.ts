@@ -103,9 +103,12 @@ export async function POST(request: Request) {
       );
     }
     const colorName = normalized.colorName ?? "";
-    const colorMatch = colorsSafe.data.find(
-      (color) => color.name.toLowerCase() === colorName.toLowerCase(),
-    );
+    const colorMatch = colorsSafe.data.find((color) => {
+      const value = color.value?.toLowerCase?.() ?? "";
+      const label = color.label?.toLowerCase?.() ?? "";
+      const target = colorName.toLowerCase();
+      return value === target || label === target;
+    });
     if (!colorMatch) {
       missingCatalogs.push(`color:${colorName || "undefined"}`);
     }

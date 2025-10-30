@@ -104,7 +104,7 @@ function mapColors(rows: ColorRow[] | null): ColorOption[] {
     const normalized = raw.trim();
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
-    result.push({ name: normalized });
+    result.push({ value: normalized, label: normalized });
   }
   return result;
 }

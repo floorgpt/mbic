@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Field } from "@/components/forms/field";
 import { LossOpportunityForm } from "@/components/forms/loss-opportunity-form";
@@ -49,6 +49,8 @@ export function FormsPageClient({
 }: FormsPageClientProps) {
   const [selectedForm, setSelectedForm] = useState<FormOptionValue>("");
   const [catalogErrors, setCatalogErrors] = useState<Record<string, string>>({});
+  const [pingChips, setPingChips] = useState<FormsStatusChip[]>([]);
+  const [pingMessages, setPingMessages] = useState<string[]>([]);
 
   const handleCatalogStatus = useCallback((source: "dealers" | "collections" | "colors", error: string | null) => {
     setCatalogErrors((prev) => {
@@ -100,14 +102,86 @@ export function FormsPageClient({
     );
   }, [diagChecks]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const endpoints = [
+      {
+        id: "ping-categories",
+        label: "Ping categorías",
+        url: "/api/forms/catalog/categories",
+      },
+      {
+        id: "ping-collections",
+        label: "Ping colecciones",
+        url: "/api/forms/catalog/collections?category=vinyl",
+      },
+      {
+        id: "ping-colors",
+        label: "Ping colores",
+        url: "/api/forms/catalog/colors?collection=SpiritXL",
+      },
+    ];
+
+    (async () => {
+      const results: FormsStatusChip[] = [];
+      const messages: string[] = [];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint.url, { cache: "no-store" });
+          const json = await response.json();
+
+          const ok = response.ok && json?.ok !== false;
+          const errMessage = ok
+            ? null
+            : json?.err ?? json?.meta?.err ?? response.statusText ?? "Endpoint failed";
+
+          results.push({
+            id: endpoint.id,
+            label: endpoint.label,
+            ok,
+            status: response.status,
+            count: json?.meta?.count ?? (Array.isArray(json?.data) ? json.data.length : 0),
+            err: errMessage,
+          });
+
+          if (!ok && errMessage) {
+            messages.push(`${endpoint.label}: ${errMessage}`);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          results.push({
+            id: endpoint.id,
+            label: endpoint.label,
+            ok: false,
+            status: 0,
+            count: 0,
+            err: message,
+          });
+          messages.push(`${endpoint.label}: ${message}`);
+        }
+      }
+
+      if (!cancelled) {
+        setPingChips(results);
+        setPingMessages(messages);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const activeMessages = useMemo(() => {
     const messages = new Set<string>();
+    pingMessages.forEach((msg) => messages.add(msg));
     if (diagAlert) {
       messages.add(diagAlert);
     }
     Object.values(catalogErrors).forEach((msg) => messages.add(msg));
     return Array.from(messages);
-  }, [catalogErrors, diagAlert]);
+  }, [catalogErrors, diagAlert, pingMessages]);
 
   const handleSelectChange = (value: string) => {
     const nextValue = (value as FormOptionValue) ?? "";
@@ -126,7 +200,7 @@ export function FormsPageClient({
         </p>
       </div>
 
-      <FormsStatusCard chips={chips} messages={activeMessages} />
+      <FormsStatusCard chips={[...chips, ...pingChips]} messages={activeMessages} />
 
       <Card>
         <CardHeader>
