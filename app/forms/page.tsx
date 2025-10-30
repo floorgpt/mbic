@@ -23,6 +23,17 @@ export default async function FormsPage() {
 
   const failingChecks = diag.checks.filter((check) => !check.ok);
 
+  const collectionsCheck = diag.checks.find((check) => check.label.startsWith("collections"));
+  const colorsCheck = diag.checks.find((check) => check.label.startsWith("colors"));
+
+  const bannerChecks = [
+    { label: "Reps", check: diag.checks.find((item) => item.label === "sales-reps") },
+    { label: "Dealers", check: diag.checks.find((item) => item.label === "dealers-by-rep") },
+    { label: "Categorías", check: diag.checks.find((item) => item.label === "categories") },
+    { label: "Colecciones", check: collectionsCheck },
+    { label: "Colores", check: colorsCheck },
+  ];
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 py-10">
       <div className="space-y-3 text-center md:text-left">
@@ -32,15 +43,21 @@ export default async function FormsPage() {
           notificamos a tu agente n8n automáticamente.
         </p>
         {diag.checks.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-center gap-2 text-xs md:justify-start">
-            {diag.checks.map((check) => (
-              <Badge
-                key={check.label}
-                variant={check.ok ? "outline" : "destructive"}
-              >
-                {check.label}: {check.ok ? check.count : check.err ?? "offline"}
-              </Badge>
-            ))}
+          <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+            <div className="flex flex-wrap items-center justify-center gap-2 text-xs md:justify-start">
+              {bannerChecks.map(({ label, check }) =>
+                check ? (
+                  <Badge key={label} variant={check.ok ? "outline" : "destructive"}>
+                    {label}: {check.ok ? check.count : check.err ?? "offline"} (
+                    HTTP {check.status})
+                  </Badge>
+                ) : (
+                  <Badge key={label} variant="destructive">
+                    {label}: sin datos
+                  </Badge>
+                ),
+              )}
+            </div>
           </div>
         ) : null}
       </div>

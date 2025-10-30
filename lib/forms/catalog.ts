@@ -24,8 +24,17 @@ type ColorRow = {
 };
 
 function ensureSupabaseError(label: string, error: unknown): never {
-  const message = error instanceof Error ? error.message : String(error);
-  throw new Error(`${label} failed: ${message}`);
+  let detail: string;
+  if (error instanceof Error) {
+    detail = error.message;
+  } else {
+    try {
+      detail = JSON.stringify(error);
+    } catch {
+      detail = String(error);
+    }
+  }
+  throw new Error(`${label} failed: ${detail}`);
 }
 
 function mapSalesReps(rows: SalesRepRow[] | null): SalesRepOption[] {
@@ -190,25 +199,48 @@ export async function getCollectionsByCategory(
   }
 
   const supabase = getSupabaseAdminClient();
+  const normalized = categoryKey.trim();
+  const pattern = normalized.toLowerCase();
   const safe = await tryServerSafe(
     (async () => {
+      const { data: matchedCategory, error: categoryLookupError } = await supabase
+        .from("product_categories")
+        .select("category_key")
+        .ilike("category_key", pattern)
+        .limit(1)
+        .maybeSingle<{ category_key: string }>();
+
+      if (categoryLookupError) {
+        ensureSupabaseError("getCollectionsByCategory:categoryLookup", categoryLookupError);
+      }
+
+      const resolvedKey = matchedCategory?.category_key ?? normalized;
+
       const { data, error } = await supabase
         .from("product_category_collection_map")
         .select("category_key, collection_key, collection_label")
-        .eq("category_key", categoryKey)
+        .ilike("category_key", resolvedKey)
         .order("collection_key", { ascending: true });
 
       if (error) {
         ensureSupabaseError("getCollectionsByCategory", error);
       }
 
-      return mapCollections(data ?? []);
+      const mapped = mapCollections(data ?? []);
+      if (!mapped.length) {
+        throw new Error(`No collections found for category "${resolvedKey}"`);
+      }
+      return mapped;
     })(),
-    `forms:getCollections:${categoryKey}`,
+    `forms:getCollections:${normalized}`,
     [],
   );
 
-  console.log("[forms] catalog:getCollectionsByCategory", { categoryKey, ...safe._meta });
+  console.log("[forms] catalog:getCollectionsByCategory", {
+    requested: categoryKey,
+    normalized,
+    ...safe._meta,
+  });
   return safe;
 }
 
@@ -223,11 +255,12 @@ export async function getColorsByCollection(collectionKey: string): Promise<Safe
   }
 
   const supabase = getSupabaseAdminClient();
+  const normalized = collectionKey.trim();
   const safe = await tryServerSafe(
     (async () => {
       const { data, error } = await supabase.rpc(
         "get_colors_by_collection_v2" as never,
-        { collection_key: collectionKey } as never,
+        { collection_key: normalized } as never,
       );
 
       if (error) {
@@ -235,12 +268,20 @@ export async function getColorsByCollection(collectionKey: string): Promise<Safe
       }
 
       const rows = Array.isArray(data) ? (data as ColorRow[]) : [];
-      return mapColors(rows);
+      const mapped = mapColors(rows);
+      if (!mapped.length) {
+        throw new Error(`No colors found for collection "${normalized}"`);
+      }
+      return mapped;
     })(),
-    `forms:getColors:${collectionKey}`,
+    `forms:getColors:${normalized}`,
     [],
   );
 
-  console.log("[forms] catalog:getColorsByCollection", { collectionKey, ...safe._meta });
+  console.log("[forms] catalog:getColorsByCollection", {
+    requested: collectionKey,
+    normalized,
+    ...safe._meta,
+  });
   return safe;
 }

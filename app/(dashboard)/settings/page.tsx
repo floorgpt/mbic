@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
+import { getFormsWebhookSettings } from "@/lib/forms/settings";
 import {
   Tabs,
   TabsContent,
@@ -18,7 +19,10 @@ export const metadata: Metadata = {
   title: "Settings • CPF Floors MBIC",
 };
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const formsSettings = await getFormsWebhookSettings();
+  const publicFormUrl = "https://cpf-mbic2.netlify.app/forms";
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -180,14 +184,14 @@ export default function SettingsPage() {
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
                   <div className="flex w-full items-center gap-2">
                     <Input
-                      value="https://cpf-mbic2.netlify.app/forms"
+                      value={publicFormUrl}
                       readOnly
                       className="font-mono"
                     />
-                    <CopyButton value="https://cpf-mbic2.netlify.app/forms" />
+                    <CopyButton value={publicFormUrl} />
                   </div>
                   <Button asChild variant="secondary" className="md:shrink-0">
-                    <Link href="https://cpf-mbic2.netlify.app/forms" target="_blank" rel="noreferrer">
+                    <Link href={publicFormUrl} target="_blank" rel="noreferrer">
                       Open Form
                     </Link>
                   </Button>
@@ -195,6 +199,43 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   Comparte este enlace con Sales Ops para registrar pérdidas sin necesidad de iniciar sesión.
                 </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none bg-background">
+            <CardHeader>
+              <CardTitle className="font-montserrat text-xl">
+                n8n Webhooks
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Modo activo
+                </label>
+                <Input value={formsSettings.mode.toUpperCase()} readOnly className="font-mono" />
+                <p className="text-xs text-muted-foreground">
+                  Determina qué webhook recibe las notificaciones del formulario público.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Webhook Test
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input value={formsSettings.urls.test} readOnly className="font-mono" />
+                  <CopyButton value={formsSettings.urls.test} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Webhook Prod
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input value={formsSettings.urls.prod} readOnly className="font-mono" />
+                  <CopyButton value={formsSettings.urls.prod} />
+                </div>
               </div>
             </CardContent>
           </Card>

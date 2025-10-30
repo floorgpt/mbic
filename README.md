@@ -179,6 +179,26 @@ UI components live in `components/sales-ops/`:
 
 Loading states are handled via `app/(dashboard)/sales-ops/loading.tsx`, which mirrors the shimmer styling used elsewhere. When either Supabase environment variable is missing, a banner displays and every panel meta is forced to `{ ok: false }`, keeping the UI in a consistent “Thinking…” state without firing RPCs.
 
+### Sales Ops Forms (`app/forms/page.tsx`)
+
+The Sales Ops form is a public-facing capture flow that lands inside `public.loss_opportunities` and immediately notifies n8n. It mirrors the same Supabase guardrails used by the dashboard:
+
+- **Catalog helpers** live in `lib/forms/catalog.ts` (`getSalesReps`, `getDealersByRep`, `getCategories`, `getCollectionsByCategory`, `getColorsByCollection`). Every helper uses `getSupabaseAdminClient()` and enforces case-insensitive keys so `category=vinyl` and `collection=SpiritXL` resolve correctly.
+- **Submission guardrails** are implemented in `app/api/forms/loss-opportunity/route.ts`. The route validates payload shape, re-checks every catalog before inserting, and returns `{ ok: true, id, webhook: { mode, url } }` on success. Failures include `"Catálogos incompletos"` with the missing pieces or `"Catálogos fuera de línea"` if Supabase reports an error. Webhooks respect the stored mode under Settings → Webhooks.
+- **Diagnostics** are exposed via `GET /api/diag-forms`. Each check returns `{ label, ok, status, count, err, sample }`, making it easy to confirm catalog reachability (e.g. `collections-vinyl`, `colors-SpiritXL`, `loss-opportunity-insert`). Pass `?dryRun=false` to perform an insert + clean-up round trip.
+- **Settings → Forms tab** surfaces the public URL and both n8n webhook URLs (Test / Prod) with copy buttons. The active mode is read from `mbic_settings`.
+- **UI telemetry**: `/forms` renders a banner with the latest diagnostic counts (red badges flag failing checks) and logs `[forms] catalog:<action>` plus `[forms] api/<route>` events for server observability.
+
+Quick sanity commands (all return JSON):
+
+```bash
+curl -s https://cpf-mbic2.netlify.app/api/diag-forms | jq
+curl -s "https://cpf-mbic2.netlify.app/api/forms/catalog/categories" | jq '.data | length'
+curl -s "https://cpf-mbic2.netlify.app/api/forms/catalog/collections?category=vinyl" | jq
+curl -s "https://cpf-mbic2.netlify.app/api/forms/catalog/colors?collection=SpiritXL" | jq
+curl -s https://cpf-mbic2.netlify.app/api/settings/webhooks | jq
+```
+
 ### Failure Handling & Logging
 
 | Layer | Behaviour | Output |
