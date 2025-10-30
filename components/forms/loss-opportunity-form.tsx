@@ -24,9 +24,16 @@ import type {
   SalesRepOption,
 } from "@/types/forms";
 
+export type LossOpportunitySelection = {
+  repId: string;
+  categoryKey: string;
+  collectionKey: string;
+};
+
 type LossOpportunityFormProps = {
   initialSalesReps: SalesRepOption[];
   initialCategories: CategoryOption[];
+  onSelectionChange?: (selection: LossOpportunitySelection) => void;
   onCatalogStatus?: (source: "dealers" | "collections" | "colors", error: string | null) => void;
 };
 
@@ -146,6 +153,7 @@ export function LossOpportunityForm({
   initialSalesReps,
   initialCategories,
   onCatalogStatus,
+  onSelectionChange,
 }: LossOpportunityFormProps) {
   const [values, setValues] = useState<FormValues>(() => ({
     ...DEFAULT_VALUES,
@@ -159,6 +167,13 @@ export function LossOpportunityForm({
   const [collectionsState, setCollectionsState] =
     useState<CatalogState<CollectionOption>>(EMPTY_CATALOG);
   const [colorsState, setColorsState] = useState<CatalogState<ColorOption>>(EMPTY_CATALOG);
+  useEffect(() => {
+    onSelectionChange?.({
+      repId: values.repId,
+      categoryKey: values.categoryKey,
+      collectionKey: values.collectionKey,
+    });
+  }, [onSelectionChange, values.categoryKey, values.collectionKey, values.repId]);
 
   const potentialAmount = useMemo(
     () => computePotentialAmount(values.requestedQty, values.targetPrice),

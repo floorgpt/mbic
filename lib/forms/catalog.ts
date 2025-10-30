@@ -102,8 +102,10 @@ function mapColors(rows: ColorRow[] | null): ColorOption[] {
           : null;
     if (!raw) continue;
     const normalized = raw.trim();
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     result.push({ value: normalized, label: normalized });
   }
   return result;

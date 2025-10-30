@@ -49,47 +49,84 @@ function fromSafeResult<T>(label: string, safe: SafeResult<T>): FormsDiagCheck {
   };
 }
 
-export async function runFormsDiagnostics(options?: { dryRun?: boolean }): Promise<FormsDiagResult> {
+type RunDiagOptions = {
+  dryRun?: boolean;
+  repId?: number | null;
+  categoryKey?: string | null;
+  collectionKey?: string | null;
+};
+
+export async function runFormsDiagnostics(options?: RunDiagOptions): Promise<FormsDiagResult> {
   const dryRun = options?.dryRun !== false;
+  const requestedRepId = Number.isFinite(options?.repId) ? Number(options?.repId) : null;
+  const requestedCategoryKey = options?.categoryKey
+    ? options.categoryKey.trim() || null
+    : null;
+  const requestedCollectionKey = options?.collectionKey
+    ? options.collectionKey.trim() || null
+    : null;
+  const hasRepSelection = requestedRepId != null;
+  const hasCategorySelection = Boolean(requestedCategoryKey);
+  const hasCollectionSelection = Boolean(requestedCollectionKey);
 
   const checks: FormsDiagCheck[] = [];
 
   const reps = await getSalesReps();
   checks.push(fromSafeResult("sales-reps", reps));
-  const repId = reps.data[0]?.id ?? null;
+  const resolvedRepId = reps.data.find((rep) => rep.id === requestedRepId)?.id ?? null;
+  const repId = hasRepSelection ? resolvedRepId : null;
+
+  if (hasRepSelection && repId == null) {
+    checks.push({
+      label: "dealers-by-rep",
+      ok: false,
+      status: 404,
+      count: 0,
+      err: `Rep ${requestedRepId} no encontrado`,
+      sample: null,
+    });
+  }
 
   let dealerId: number | null = null;
   if (repId) {
     const dealers = await getDealersByRep(repId);
-    checks.push(fromSafeResult("dealers-by-rep", dealers));
+    checks.push(fromSafeResult(`dealers-by-rep:${repId}`, dealers));
     dealerId = dealers.data[0]?.id ?? null;
   } else {
     checks.push({
       label: "dealers-by-rep",
-      ok: false,
-      status: 424,
+      ok: true,
+      status: 200,
       count: 0,
-      err: "No hay reps disponibles para validar dealers",
+      err: "Sin selección",
       sample: null,
     });
   }
 
   const categories = await getCategories();
   checks.push(fromSafeResult("categories", categories));
-  const categoryKey = categories.data[0]?.key ?? null;
+  const categoryKey = hasCategorySelection
+    ? categories.data.find(
+        (category) => category.key.toLowerCase() === requestedCategoryKey?.toLowerCase(),
+      )?.key ?? requestedCategoryKey
+    : null;
 
   let collectionKey: string | null = null;
   if (categoryKey) {
     const collections = await getCollectionsByCategory(categoryKey);
     checks.push(fromSafeResult(`collections-${categoryKey}`, collections));
-    collectionKey = collections.data[0]?.key ?? null;
+    collectionKey = hasCollectionSelection
+      ? collections.data.find(
+          (collection) => collection.key.toLowerCase() === requestedCollectionKey?.toLowerCase(),
+        )?.key ?? requestedCollectionKey
+      : null;
   } else {
     checks.push({
       label: "collections",
-      ok: false,
-      status: 424,
+      ok: true,
+      status: 200,
       count: 0,
-      err: "No hay categorías para validar colecciones",
+      err: "Sin selección",
       sample: null,
     });
   }
@@ -102,18 +139,33 @@ export async function runFormsDiagnostics(options?: { dryRun?: boolean }): Promi
   } else {
     checks.push({
       label: "colors",
-      ok: false,
-      status: 424,
+      ok: true,
+      status: 200,
       count: 0,
-      err: "No hay colecciones para validar colores",
+      err: "Sin selección",
       sample: null,
     });
   }
 
+  const selectionsProvided = hasRepSelection && hasCategorySelection && hasCollectionSelection;
   const canInsert =
-    repId != null && dealerId != null && categoryKey && collectionKey && colorName;
+    selectionsProvided &&
+    repId != null &&
+    dealerId != null &&
+    categoryKey &&
+    collectionKey &&
+    colorName;
 
-  if (!canInsert) {
+  if (!selectionsProvided) {
+    checks.push({
+      label: "loss-opportunity-insert",
+      ok: true,
+      status: 200,
+      count: 0,
+      err: "Sin selección",
+      sample: null,
+    });
+  } else if (!canInsert) {
     checks.push({
       label: "loss-opportunity-insert",
       ok: false,

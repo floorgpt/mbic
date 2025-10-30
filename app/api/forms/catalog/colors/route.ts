@@ -34,6 +34,7 @@ export async function GET(request: Request) {
     }
 
     const rows = Array.isArray(data) ? data : [];
+    const seen = new Set<string>();
     const mapped = rows
       .map((row) => {
         if (!row) return null;
@@ -53,7 +54,15 @@ export async function GET(request: Request) {
         const value = raw.trim();
         return value ? { value, label: value } : null;
       })
-      .filter((entry): entry is { value: string; label: string } => Boolean(entry));
+      .filter((entry): entry is { value: string; label: string } => {
+        if (!entry) return false;
+        const normalized = entry.value.toLowerCase();
+        if (seen.has(normalized)) {
+          return false;
+        }
+        seen.add(normalized);
+        return true;
+      });
 
     return NextResponse.json({
       ok: true,

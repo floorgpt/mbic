@@ -62,12 +62,13 @@ export async function POST(request: Request) {
     }
 
     const dealersSafe = await getDealersByRep(normalized.repId);
-    if (!dealersSafe._meta.ok) {
-      catalogIssues.push(`dealers: ${dealersSafe._meta.err ?? "offline"}`);
-    }
-    const dealerMatch = dealersSafe.data.find((dealer) => dealer.id === normalized.dealerId);
-    if (!dealerMatch) {
-      missingCatalogs.push(`dealer:${normalized.dealerId}`);
+    if (dealersSafe._meta.ok) {
+      const dealerMatch = dealersSafe.data.find((dealer) => dealer.id === normalized.dealerId);
+      if (!dealerMatch) {
+        missingCatalogs.push(`dealer:${normalized.dealerId}`);
+      }
+    } else {
+      console.warn("[forms] api/loss-opportunity:dealers-offline", dealersSafe._meta);
     }
 
     const categoriesSafe = await getCategories();
@@ -87,13 +88,19 @@ export async function POST(request: Request) {
       catalogIssues.push(
         `collections:${categoryKey || "undefined"}: ${collectionsSafe._meta.err ?? "offline"}`,
       );
+    } else {
+      if ((collectionsSafe.data?.length ?? 0) === 0) {
+        missingCatalogs.push(`collections-empty:${categoryKey}`);
+      }
     }
     const collectionKey = normalized.collectionKey ?? "";
-    const collectionMatch = collectionsSafe.data.find(
-      (collection) => collection.key.toLowerCase() === collectionKey.toLowerCase(),
-    );
-    if (!collectionMatch) {
-      missingCatalogs.push(`collection:${collectionKey || "undefined"}`);
+    if (collectionsSafe._meta.ok) {
+      const collectionMatch = collectionsSafe.data.find(
+        (collection) => collection.key.toLowerCase() === collectionKey.toLowerCase(),
+      );
+      if (!collectionMatch) {
+        missingCatalogs.push(`collection:${collectionKey || "undefined"}`);
+      }
     }
 
     const colorsSafe = await getColorsByCollection(collectionKey);
@@ -101,16 +108,22 @@ export async function POST(request: Request) {
       catalogIssues.push(
         `colors:${collectionKey || "undefined"}: ${colorsSafe._meta.err ?? "offline"}`,
       );
+    } else {
+      if ((colorsSafe.data?.length ?? 0) === 0) {
+        missingCatalogs.push(`colors-empty:${collectionKey}`);
+      }
     }
     const colorName = normalized.colorName ?? "";
-    const colorMatch = colorsSafe.data.find((color) => {
-      const value = color.value?.toLowerCase?.() ?? "";
-      const label = color.label?.toLowerCase?.() ?? "";
-      const target = colorName.toLowerCase();
-      return value === target || label === target;
-    });
-    if (!colorMatch) {
-      missingCatalogs.push(`color:${colorName || "undefined"}`);
+    if (colorsSafe._meta.ok) {
+      const colorMatch = colorsSafe.data.find((color) => {
+        const value = color.value?.toLowerCase?.() ?? "";
+        const label = color.label?.toLowerCase?.() ?? "";
+        const target = colorName.toLowerCase();
+        return value === target || label === target;
+      });
+      if (!colorMatch) {
+        missingCatalogs.push(`color:${colorName || "undefined"}`);
+      }
     }
 
     if (catalogIssues.length > 0) {

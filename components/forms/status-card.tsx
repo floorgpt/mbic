@@ -10,6 +10,7 @@ export type FormsStatusChip = {
   status: number;
   count: number;
   err: string | null;
+  intent?: "required" | "optional";
 };
 
 type FormsStatusCardProps = {
@@ -29,12 +30,19 @@ export function FormsStatusCard({ chips, messages = [] }: FormsStatusCardProps) 
       <CardContent className="space-y-3 p-4">
         {chips.length ? (
           <div className="flex flex-wrap items-center justify-center gap-2 text-xs md:justify-start">
-            {chips.map((chip) => (
-              <Badge key={chip.id} variant={chip.ok ? "outline" : "destructive"}>
-                {chip.label}: {chip.ok ? chip.count : chip.err ?? "offline"}
-                {chip.status ? ` (HTTP ${chip.status})` : null}
-              </Badge>
-            ))}
+            {chips.map((chip) => {
+              const variant =
+                chip.ok || chip.intent === "optional" ? "outline" : "destructive";
+              const text = chip.ok
+                ? chip.err ?? String(chip.count)
+                : chip.err ?? "offline";
+              return (
+                <Badge key={chip.id} variant={variant}>
+                  {chip.label}: {text}
+                  {chip.status ? ` (HTTP ${chip.status})` : null}
+                </Badge>
+              );
+            })}
           </div>
         ) : null}
         {uniqueMessages.map((message) => (

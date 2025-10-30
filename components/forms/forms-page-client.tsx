@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Field } from "@/components/forms/field";
-import { LossOpportunityForm } from "@/components/forms/loss-opportunity-form";
+import {
+  LossOpportunityForm,
+  type LossOpportunitySelection,
+} from "@/components/forms/loss-opportunity-form";
 import { FormsStatusCard, type FormsStatusChip } from "@/components/forms/status-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -49,145 +52,209 @@ export function FormsPageClient({
 }: FormsPageClientProps) {
   const [selectedForm, setSelectedForm] = useState<FormOptionValue>("");
   const [catalogErrors, setCatalogErrors] = useState<Record<string, string>>({});
-  const [pingChips, setPingChips] = useState<FormsStatusChip[]>([]);
-  const [pingMessages, setPingMessages] = useState<string[]>([]);
+  const [dynamicChips, setDynamicChips] = useState<FormsStatusChip[]>([]);
+  const [selection, setSelection] = useState<LossOpportunitySelection>({
+    repId: "",
+    categoryKey: "",
+    collectionKey: "",
+  });
 
-  const handleCatalogStatus = useCallback((source: "dealers" | "collections" | "colors", error: string | null) => {
-    setCatalogErrors((prev) => {
-      if (error) {
-        return { ...prev, [source]: error };
-      }
-      const next = { ...prev };
-      delete next[source];
-      return next;
-    });
+  const handleCatalogStatus = useCallback(
+    (source: "dealers" | "collections" | "colors", error: string | null) => {
+      setCatalogErrors((prev) => {
+        if (error) {
+          return { ...prev, [source]: error };
+        }
+        const next = { ...prev };
+        delete next[source];
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSelectionChange = useCallback((next: LossOpportunitySelection) => {
+    setSelection(next);
   }, []);
 
-  const diagAlert = useMemo(() => {
-    const failures = diagChecks.filter((check) => !check.ok);
-    if (!failures.length) return null;
-    return "Algunas dependencias están fuera de línea. Revisa webhooks/catálogos antes de usar el formulario.";
-  }, [diagChecks]);
-
-  const chips: FormsStatusChip[] = useMemo(() => {
-    const findCheck = (predicate: (label: string) => boolean) =>
-      diagChecks.find((check) => predicate(check.label));
-
-    const defaults = (id: string, label: string) => ({
-      id,
-      label,
-      ok: false,
-      status: 0,
-      count: 0,
-      err: "sin datos",
-    });
-
-    return [
-      { id: "reps", label: "Reps", check: diagChecks.find((item) => item.label === "sales-reps") },
-      { id: "dealers", label: "Dealers", check: diagChecks.find((item) => item.label === "dealers-by-rep") },
-      { id: "categories", label: "Categorías", check: diagChecks.find((item) => item.label === "categories") },
-      { id: "collections", label: "Colecciones", check: findCheck((label) => label.startsWith("collections")) },
-      { id: "colors", label: "Colores", check: findCheck((label) => label.startsWith("colors")) },
-    ].map(({ id, label, check }) =>
-      check
-        ? {
-            id,
-            label,
-            ok: check.ok,
-            status: check.status,
-            count: check.count,
-            err: check.err,
-          }
-        : defaults(id, label),
-    );
-  }, [diagChecks]);
+  const baseChips: FormsStatusChip[] = useMemo(
+    () =>
+      diagChecks
+        .filter((check) => check.label === "sales-reps")
+        .map((check) => ({
+          id: "reps",
+          label: "Reps",
+          ok: check.ok,
+          status: check.status,
+          count: check.count,
+          err: check.err,
+          intent: "required" as const,
+        })),
+    [diagChecks],
+  );
 
   useEffect(() => {
+    if (selectedForm !== "loss") {
+      setDynamicChips([]);
+      return;
+    }
+
     let cancelled = false;
-    const endpoints = [
-      {
-        id: "ping-categories",
-        label: "Ping categorías",
-        url: "/api/forms/catalog/categories",
-      },
-      {
-        id: "ping-collections",
-        label: "Ping colecciones",
-        url: "/api/forms/catalog/collections?category=vinyl",
-      },
-      {
-        id: "ping-colors",
-        label: "Ping colores",
-        url: "/api/forms/catalog/colors?collection=SpiritXL",
-      },
-    ];
+
+    type CatalogFetchResponse = {
+      ok?: boolean;
+      err?: string | null;
+      meta?: { ok?: boolean; count?: number; err?: string | null };
+      data?: unknown;
+    };
+
+    async function fetchChip(url: string) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        let json: CatalogFetchResponse | null = null;
+        try {
+          json = (await response.json()) as CatalogFetchResponse;
+        } catch {
+          json = null;
+        }
+        const ok = response.ok && json?.ok !== false;
+        const count = json?.meta?.count ?? (Array.isArray(json?.data) ? json.data.length : 0);
+        const err = ok ? json?.meta?.err ?? null : json?.meta?.err ?? json?.err ?? response.statusText ?? "Endpoint failed";
+        return { ok, status: response.status, count, err };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { ok: false, status: 0, count: 0, err: message };
+      }
+    }
 
     (async () => {
-      const results: FormsStatusChip[] = [];
-      const messages: string[] = [];
+      const chips: FormsStatusChip[] = [];
 
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint.url, { cache: "no-store" });
-          const json = await response.json();
+      const categories = await fetchChip("/api/forms/catalog/categories");
+      chips.push({
+        id: "categories",
+        label: "Categorías",
+        intent: "required",
+        ...categories,
+      });
 
-          const ok = response.ok && json?.ok !== false;
-          const errMessage = ok
-            ? null
-            : json?.err ?? json?.meta?.err ?? response.statusText ?? "Endpoint failed";
+      if (selection.repId) {
+        const dealers = await fetchChip(`/api/forms/catalog/dealers?repId=${encodeURIComponent(selection.repId)}`);
+        chips.push({
+          id: "dealers",
+          label: "Dealers",
+          intent: "optional",
+          ...dealers,
+        });
+      } else {
+        chips.push({
+          id: "dealers",
+          label: "Dealers",
+          intent: "optional",
+          ok: true,
+          status: 200,
+          count: 0,
+          err: "Sin selección",
+        });
+      }
 
-          results.push({
-            id: endpoint.id,
-            label: endpoint.label,
-            ok,
-            status: response.status,
-            count: json?.meta?.count ?? (Array.isArray(json?.data) ? json.data.length : 0),
-            err: errMessage,
-          });
+      if (selection.categoryKey) {
+        const collections = await fetchChip(
+          `/api/forms/catalog/collections?category=${encodeURIComponent(selection.categoryKey)}`,
+        );
+        chips.push({
+          id: "collections",
+          label: "Colecciones",
+          intent: "required",
+          ...collections,
+        });
+      } else {
+        chips.push({
+          id: "collections",
+          label: "Colecciones",
+          intent: "required",
+          ok: true,
+          status: 200,
+          count: 0,
+          err: "Sin selección",
+        });
+      }
 
-          if (!ok && errMessage) {
-            messages.push(`${endpoint.label}: ${errMessage}`);
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          results.push({
-            id: endpoint.id,
-            label: endpoint.label,
-            ok: false,
-            status: 0,
-            count: 0,
-            err: message,
-          });
-          messages.push(`${endpoint.label}: ${message}`);
-        }
+      if (selection.collectionKey) {
+        const colors = await fetchChip(
+          `/api/forms/catalog/colors?collection=${encodeURIComponent(selection.collectionKey)}`,
+        );
+        chips.push({
+          id: "colors",
+          label: "Colores",
+          intent: "required",
+          ...colors,
+        });
+      } else {
+        chips.push({
+          id: "colors",
+          label: "Colores",
+          intent: "required",
+          ok: true,
+          status: 200,
+          count: 0,
+          err: "Sin selección",
+        });
       }
 
       if (!cancelled) {
-        setPingChips(results);
-        setPingMessages(messages);
+        setDynamicChips(chips);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedForm, selection]);
+
+  const combinedChips = useMemo(
+    () => [...baseChips, ...dynamicChips],
+    [baseChips, dynamicChips],
+  );
 
   const activeMessages = useMemo(() => {
     const messages = new Set<string>();
-    pingMessages.forEach((msg) => messages.add(msg));
-    if (diagAlert) {
-      messages.add(diagAlert);
+
+    const requiredFailures = combinedChips.filter(
+      (chip) => chip.intent !== "optional" && !chip.ok,
+    );
+    if (requiredFailures.length) {
+      messages.add(
+        "Algunas dependencias están fuera de línea. Revisa webhooks/catálogos antes de usar el formulario.",
+      );
+      requiredFailures.forEach((chip) => {
+        if (chip.err) {
+          messages.add(`${chip.label}: ${chip.err}`);
+        }
+      });
     }
-    Object.values(catalogErrors).forEach((msg) => messages.add(msg));
+
+    combinedChips.forEach((chip) => {
+      if (chip.intent === "optional" && !chip.ok && chip.err) {
+        messages.add(`${chip.label}: ${chip.err}`);
+      }
+    });
+
+    Object.values(catalogErrors).forEach((msg) => {
+      if (msg) {
+        messages.add(msg);
+      }
+    });
+
     return Array.from(messages);
-  }, [catalogErrors, diagAlert, pingMessages]);
+  }, [catalogErrors, combinedChips]);
 
   const handleSelectChange = (value: string) => {
     const nextValue = (value as FormOptionValue) ?? "";
     setSelectedForm(nextValue);
     if (nextValue !== "loss") {
       setCatalogErrors({});
+      setSelection({ repId: "", categoryKey: "", collectionKey: "" });
     }
   };
 
@@ -200,7 +267,7 @@ export function FormsPageClient({
         </p>
       </div>
 
-      <FormsStatusCard chips={[...chips, ...pingChips]} messages={activeMessages} />
+      <FormsStatusCard chips={combinedChips} messages={activeMessages} />
 
       <Card>
         <CardHeader>
@@ -234,6 +301,7 @@ export function FormsPageClient({
               initialSalesReps={initialSalesReps}
               initialCategories={initialCategories}
               onCatalogStatus={handleCatalogStatus}
+              onSelectionChange={handleSelectionChange}
             />
           ) : null}
 
