@@ -76,6 +76,7 @@ export async function PUT(request: Request) {
   try {
     payload = (await request.json()) as SettingsPayload;
   } catch (error) {
+    console.error("[forms] settings:update:invalid-json", error);
     return NextResponse.json(
       {
         ok: false,

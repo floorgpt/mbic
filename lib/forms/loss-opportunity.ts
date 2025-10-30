@@ -4,6 +4,7 @@ import "server-only";
 
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { tryServerSafe, type SafeResult } from "@/lib/utils";
+import type { LossOpportunityInsert } from "@/types/database";
 import type {
   FormsWebhookMode,
   LossOpportunityPayload,
@@ -56,7 +57,9 @@ function ensureString(value: unknown): string | null {
   return null;
 }
 
-export function validateLossOpportunityPayload(payload: LossOpportunityPayload): ValidationResult {
+export async function validateLossOpportunityPayload(
+  payload: LossOpportunityPayload,
+): Promise<ValidationResult> {
   const errors: string[] = [];
 
   const repId = ensureInteger(payload?.repId);
@@ -127,7 +130,7 @@ export async function insertLossOpportunity(
 
   const safe = await tryServerSafe(
     (async () => {
-      const row: Record<string, unknown> = {
+      const row: LossOpportunityInsert = {
         dealer_id: payload.dealerId,
         rep_id: payload.repId,
         lost_date: new Date().toISOString(),
@@ -135,27 +138,18 @@ export async function insertLossOpportunity(
         potential_amount: payload.potentialAmount,
         due_to_stock: payload.reason === "no_stock",
         lost_reason: payload.reason,
-        notes: payload.notes,
+        notes: payload.notes ?? null,
+        category_key: payload.categoryKey ?? null,
+        collection: payload.collectionKey ?? null,
+        color: payload.colorName ?? null,
+        expected_sku: payload.expectedSku ?? null,
       };
 
-      if (payload.categoryKey) {
-        row.category_key = payload.categoryKey;
-      }
-      if (payload.collectionKey) {
-        row.collection = payload.collectionKey;
-      }
-      if (payload.colorName) {
-        row.color = payload.colorName;
-      }
-      if (payload.expectedSku) {
-        row.expected_sku = payload.expectedSku;
-      }
-
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("loss_opportunities")
-        .insert(row)
+        .insert(row as never)
         .select("id")
-        .maybeSingle();
+        .maybeSingle<{ id: number }>();
 
       if (error) {
         throw new Error(`loss_opportunities insert failed: ${error.message}`);

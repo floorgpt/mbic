@@ -130,7 +130,7 @@ export async function runFormsDiagnostics(options?: { dryRun?: boolean }): Promi
 
     if (insertResult._meta.ok && insertResult.data.id) {
       const supabase = getSupabaseAdminClient();
-      await (supabase as any)
+      await supabase
         .from("loss_opportunities")
         .delete()
         .eq("id", insertResult.data.id);

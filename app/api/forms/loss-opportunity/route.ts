@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const validation = validateLossOpportunityPayload(payload);
+  const validation = await validateLossOpportunityPayload(payload);
   if (!validation.ok) {
     return NextResponse.json(
       {
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   const settings = await getFormsWebhookSettings();
-  const { mode, url } = resolveWebhookUrl(settings);
+  const { mode, url } = await resolveWebhookUrl(settings);
 
   const webhookResult = await triggerLossOpportunityWebhook(
     url,

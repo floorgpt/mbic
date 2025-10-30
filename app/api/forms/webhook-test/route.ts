@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
   const settings = await getFormsWebhookSettings();
   const targetSettings = overrideMode ? { ...settings, mode: overrideMode } : settings;
-  const { mode, url } = resolveWebhookUrl(targetSettings);
+  const { mode, url } = await resolveWebhookUrl(targetSettings);
 
   const result = await triggerLossOpportunityWebhook(url, mode, SAMPLE_PAYLOAD, null);
   const status = result.ok ? 200 : 502;

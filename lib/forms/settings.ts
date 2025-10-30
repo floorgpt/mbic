@@ -5,7 +5,7 @@ import "server-only";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { tryServerSafe, type SafeResult } from "@/lib/utils";
 import type { FormsWebhookMode, FormsWebhookSettings, FormsWebhookUrls } from "@/types/forms";
-import type { Json } from "@/types/database";
+import type { Json, MbicSettingInsert } from "@/types/database";
 
 const WEBHOOK_MODE_KEY = "forms_webhook_mode";
 const WEBHOOK_URLS_KEY = "forms_webhook_urls";
@@ -79,19 +79,18 @@ export async function saveFormsWebhookSettings(
     (async () => {
       const { mode, urls } = settings;
 
+      const modeRow: MbicSettingInsert = {
+        key: WEBHOOK_MODE_KEY,
+        value: mode,
+      };
+      const urlsRow: MbicSettingInsert = {
+        key: WEBHOOK_URLS_KEY,
+        value: urls as Json,
+      };
+
       await Promise.all([
-        (supabase as any)
-          .from("mbic_settings")
-          .upsert(
-            { key: WEBHOOK_MODE_KEY, value: mode },
-            { onConflict: "key" },
-          ),
-        (supabase as any)
-          .from("mbic_settings")
-          .upsert(
-            { key: WEBHOOK_URLS_KEY, value: urls as Json },
-            { onConflict: "key" },
-          ),
+        supabase.from("mbic_settings").upsert(modeRow as never, { onConflict: "key" }),
+        supabase.from("mbic_settings").upsert(urlsRow as never, { onConflict: "key" }),
       ]);
 
       return settings;
@@ -104,16 +103,16 @@ export async function saveFormsWebhookSettings(
   return safe;
 }
 
-export function resolveWebhookUrl(settings: FormsWebhookSettings): {
+export async function resolveWebhookUrl(settings: FormsWebhookSettings): Promise<{
   mode: FormsWebhookMode;
   url: string;
-} {
+}> {
   const mode = settings.mode === "prod" ? "prod" : "test";
   const url = settings.urls[mode] ?? DEFAULT_WEBHOOK_URLS[mode];
   return { mode, url };
 }
 
-export function getDefaultWebhookSettings(): FormsWebhookSettings {
+export async function getDefaultWebhookSettings(): Promise<FormsWebhookSettings> {
   return {
     mode: DEFAULT_WEBHOOK_MODE,
     urls: DEFAULT_WEBHOOK_URLS,

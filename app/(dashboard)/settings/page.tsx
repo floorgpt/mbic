@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 
+import Link from "next/link";
+
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import {
   Tabs,
@@ -29,6 +32,7 @@ export default function SettingsPage() {
           <TabsTrigger value="apis">API Keys</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="forms">Forms</TabsTrigger>
         </TabsList>
 
         <TabsContent value="apis" className="space-y-4">
@@ -155,6 +159,41 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   Live analytics sourced from `sales_demo`, `customers_demo`, and
                   `sales_reps_demo`. Manage schema in Supabase Studio.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="forms" className="space-y-4">
+          <Card className="border-none bg-background">
+            <CardHeader>
+              <CardTitle className="font-montserrat text-xl">
+                Public Forms
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Loss Opportunity Form
+                </label>
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+                  <div className="flex w-full items-center gap-2">
+                    <Input
+                      value="https://cpf-mbic2.netlify.app/forms"
+                      readOnly
+                      className="font-mono"
+                    />
+                    <CopyButton value="https://cpf-mbic2.netlify.app/forms" />
+                  </div>
+                  <Button asChild variant="secondary" className="md:shrink-0">
+                    <Link href="https://cpf-mbic2.netlify.app/forms" target="_blank" rel="noreferrer">
+                      Open Form
+                    </Link>
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Comparte este enlace con Sales Ops para registrar pérdidas sin necesidad de iniciar sesión.
                 </p>
               </div>
             </CardContent>
