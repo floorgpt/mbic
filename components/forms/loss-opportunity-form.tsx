@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type FormEventHandler } from "react";
 
 import { Field, FieldGroup } from "@/components/forms/field";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,6 +27,7 @@ import type {
 type LossOpportunityFormProps = {
   initialSalesReps: SalesRepOption[];
   initialCategories: CategoryOption[];
+  onCatalogStatus?: (source: "dealers" | "collections" | "colors", error: string | null) => void;
 };
 
 type CatalogResponse<T> = {
@@ -87,9 +87,15 @@ const DEFAULT_VALUES: FormValues = {
   notes: "",
 };
 
+function sanitizeNumeric(value: string): string {
+  return value.replace(/[,$\s]/g, "");
+}
+
 function parsePositiveNumber(value: string): number | null {
   if (!value) return null;
-  const parsed = Number.parseFloat(value);
+  const cleaned = sanitizeNumeric(value);
+  if (!cleaned) return null;
+  const parsed = Number.parseFloat(cleaned);
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
   return parsed;
 }
@@ -111,9 +117,35 @@ async function fetchCatalog<T>(url: string, signal: AbortSignal): Promise<Catalo
   return payload;
 }
 
+const quantityFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 2,
+});
+
+const priceFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
+
+function formatQuantityDisplay(value: string): string {
+  const parsed = parsePositiveNumber(value);
+  if (parsed == null) {
+    return value.trim();
+  }
+  return quantityFormatter.format(parsed);
+}
+
+function formatPriceDisplay(value: string): string {
+  const parsed = parsePositiveNumber(value);
+  if (parsed == null) {
+    return value.trim();
+  }
+  return priceFormatter.format(parsed);
+}
+
 export function LossOpportunityForm({
   initialSalesReps,
   initialCategories,
+  onCatalogStatus,
 }: LossOpportunityFormProps) {
   const [values, setValues] = useState<FormValues>(() => ({
     ...DEFAULT_VALUES,
@@ -162,6 +194,7 @@ export function LossOpportunityForm({
     const repId = values.repId;
     if (!repId) {
       setDealersState(EMPTY_CATALOG);
+      onCatalogStatus?.("dealers", null);
       return;
     }
 
@@ -171,24 +204,24 @@ export function LossOpportunityForm({
     fetchCatalog<DealerOption>(`/api/forms/catalog/dealers?repId=${repId}`, controller.signal)
       .then((res) => {
         setDealersState({ data: res.data ?? [], loading: false, error: null });
+        onCatalogStatus?.("dealers", null);
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        setDealersState({
-          data: [],
-          loading: false,
-          error: (error as Error)?.message ?? "No pudimos cargar los dealers",
-        });
+        const message = (error as Error)?.message ?? "No pudimos cargar los dealers";
+        setDealersState({ data: [], loading: false, error: message });
+        onCatalogStatus?.("dealers", message);
       });
 
     return () => controller.abort();
-  }, [values.repId]);
+  }, [onCatalogStatus, values.repId]);
 
   // Collections by category
   useEffect(() => {
     const category = values.categoryKey;
     if (!category) {
       setCollectionsState(EMPTY_CATALOG);
+       onCatalogStatus?.("collections", null);
       return;
     }
 
@@ -201,24 +234,24 @@ export function LossOpportunityForm({
     )
       .then((res) => {
         setCollectionsState({ data: res.data ?? [], loading: false, error: null });
+        onCatalogStatus?.("collections", null);
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        setCollectionsState({
-          data: [],
-          loading: false,
-          error: (error as Error)?.message ?? "No pudimos cargar las colecciones",
-        });
+        const message = (error as Error)?.message ?? "No pudimos cargar las colecciones";
+        setCollectionsState({ data: [], loading: false, error: message });
+        onCatalogStatus?.("collections", message);
       });
 
     return () => controller.abort();
-  }, [values.categoryKey]);
+  }, [onCatalogStatus, values.categoryKey]);
 
   // Colors by collection
   useEffect(() => {
     const collection = values.collectionKey;
     if (!collection) {
       setColorsState(EMPTY_CATALOG);
+      onCatalogStatus?.("colors", null);
       return;
     }
 
@@ -231,18 +264,17 @@ export function LossOpportunityForm({
     )
       .then((res) => {
         setColorsState({ data: res.data ?? [], loading: false, error: null });
+        onCatalogStatus?.("colors", null);
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        setColorsState({
-          data: [],
-          loading: false,
-          error: (error as Error)?.message ?? "No pudimos cargar los colores",
-        });
+        const message = (error as Error)?.message ?? "No pudimos cargar los colores";
+        setColorsState({ data: [], loading: false, error: message });
+        onCatalogStatus?.("colors", message);
       });
 
     return () => controller.abort();
-  }, [values.collectionKey]);
+  }, [onCatalogStatus, values.collectionKey]);
 
   const validateForm = (): FormErrors => {
     const nextErrors: FormErrors = {};
@@ -304,9 +336,15 @@ export function LossOpportunityForm({
     try {
       const result = await createLossOpportunity(payload);
       if (result.ok) {
+        const id = (result as { id?: number | null }).id ?? null;
+        const webhook = (result as {
+          webhook?: { mode?: string; url?: string } | null;
+        }).webhook;
+        const modeLabel = webhook?.mode ? webhook.mode.toUpperCase() : "?";
+        const webhookUrl = webhook?.url ?? "sin URL";
         setStatus({
           type: "success",
-          text: "Pérdida registrada y notificada ✅",
+          text: `Pérdida registrada (#${id ?? "sin id"}). Webhook ${modeLabel} → ${webhookUrl}`,
         });
         setErrors({});
         setValues((prev) => ({
@@ -321,6 +359,8 @@ export function LossOpportunityForm({
         }));
         setCollectionsState(EMPTY_CATALOG);
         setColorsState(EMPTY_CATALOG);
+        onCatalogStatus?.("collections", null);
+        onCatalogStatus?.("colors", null);
       } else {
         setStatus({
           type: "error",
@@ -528,12 +568,12 @@ export function LossOpportunityForm({
         >
           <Input
             id="loss-qty"
-            type="number"
-            min="0"
-            step="0.01"
+            type="text"
             inputMode="decimal"
             value={values.requestedQty}
             onChange={(event) => handleValueChange("requestedQty", event.target.value)}
+            onFocus={() => handleValueChange("requestedQty", sanitizeNumeric(values.requestedQty))}
+            onBlur={() => handleValueChange("requestedQty", formatQuantityDisplay(values.requestedQty))}
             aria-invalid={Boolean(errors.requestedQty)}
           />
         </Field>
@@ -544,16 +584,22 @@ export function LossOpportunityForm({
           required
           error={errors.targetPrice ?? null}
         >
-          <Input
-            id="loss-price"
-            type="number"
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            value={values.targetPrice}
-            onChange={(event) => handleValueChange("targetPrice", event.target.value)}
-            aria-invalid={Boolean(errors.targetPrice)}
-          />
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              $
+            </span>
+            <Input
+              id="loss-price"
+              type="text"
+              inputMode="decimal"
+              value={values.targetPrice}
+              onChange={(event) => handleValueChange("targetPrice", event.target.value)}
+              onFocus={() => handleValueChange("targetPrice", sanitizeNumeric(values.targetPrice))}
+              onBlur={() => handleValueChange("targetPrice", formatPriceDisplay(values.targetPrice))}
+              aria-invalid={Boolean(errors.targetPrice)}
+              className="pl-7"
+            />
+          </div>
         </Field>
       </FieldGroup>
 
@@ -562,14 +608,17 @@ export function LossOpportunityForm({
         label="Total Opportunity ($)"
         description="Se calcula automáticamente"
       >
-        <div className="flex items-center gap-3">
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+            $
+          </span>
           <Input
             id="loss-total"
-            value={potentialAmount > 0 ? potentialAmount.toFixed(2) : "0.00"}
+            value={formattedPotentialAmount.replace("$", "")}
             readOnly
             tabIndex={-1}
+            className="pl-7"
           />
-          <Badge variant="outline">{formattedPotentialAmount}</Badge>
         </div>
       </Field>
 
@@ -582,13 +631,15 @@ export function LossOpportunityForm({
         />
       </Field>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-3 md:flex md:items-center md:justify-between md:space-y-0">
         <p className="text-xs text-muted-foreground">
           Al enviar registramos la pérdida y notificamos a Sales Ops.
         </p>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Enviando..." : "Registrar pérdida"}
-        </Button>
+        <div className="sticky bottom-4 z-10 md:static md:bottom-auto md:z-auto md:w-auto">
+          <Button type="submit" disabled={submitting} className="w-full md:w-auto shadow-sm">
+            {submitting ? "Enviando..." : "Registrar pérdida"}
+          </Button>
+        </div>
       </div>
     </form>
   );

@@ -255,23 +255,38 @@ export async function getColorsByCollection(collectionKey: string): Promise<Safe
 
   const supabase = getSupabaseAdminClient();
   const normalized = collectionKey.trim();
+  const normalizedLower = normalized.toLowerCase();
   const safe = await tryServerSafe(
     (async () => {
-      const { data, error } = await supabase.rpc(
-        "get_colors_by_collection_v2" as never,
-        { collection_key: normalized } as never,
-      );
+      const invokeRpc = async (value: string) =>
+        supabase.rpc("get_colors_by_collection_v2" as never, { p_collection: value } as never);
 
-      if (error) {
-        ensureSupabaseError("getColorsByCollection", error);
+      let rows: ColorRow[] = [];
+
+      const firstAttempt = await invokeRpc(normalizedLower);
+      if (firstAttempt.error) {
+        ensureSupabaseError("getColorsByCollection", firstAttempt.error);
+      } else if (Array.isArray(firstAttempt.data)) {
+        rows = firstAttempt.data as ColorRow[];
       }
 
-      const rows = Array.isArray(data) ? (data as ColorRow[]) : [];
-      const mapped = mapColors(rows);
-      if (!mapped.length) {
-        throw new Error(`No colors found for collection "${normalized}"`);
+      if (!rows.length && normalizedLower !== normalized) {
+        const secondAttempt = await invokeRpc(normalized);
+        if (secondAttempt.error) {
+          ensureSupabaseError("getColorsByCollection:normalized", secondAttempt.error);
+        } else if (Array.isArray(secondAttempt.data)) {
+          rows = secondAttempt.data as ColorRow[];
+        }
       }
-      return mapped;
+
+      if (!rows.length) {
+        console.warn("[forms] catalog:getColorsByCollection:empty", {
+          requested: collectionKey,
+          normalized,
+        });
+      }
+
+      return mapColors(rows);
     })(),
     `forms:getColors:${normalized}`,
     [],
