@@ -20,6 +20,8 @@ export type FormsDiagCheck = {
   count: number;
   err: string | null;
   sample: unknown;
+  usedUrl?: string;
+  params?: Record<string, string>;
 };
 
 export type FormsDiagResult = {
