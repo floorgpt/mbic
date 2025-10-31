@@ -133,9 +133,40 @@ export async function runFormsDiagnostics(options?: RunDiagOptions): Promise<For
 
   let colorName: string | null = null;
   if (collectionKey) {
-    const colors = await getColorsByCollection(collectionKey);
-    checks.push(fromSafeResult(`colors-${collectionKey}`, colors));
-    colorName = colors.data[0]?.value ?? colors.data[0]?.label ?? null;
+    const colorsUrl = `/api/forms/catalog/colors?collection=${encodeURIComponent(collectionKey)}`;
+    let colorsOk = false;
+    let colorsCount = 0;
+    let colorsErr: string | null = null;
+    let colorsSample: unknown = null;
+    try {
+      const response = await fetch(colorsUrl, { cache: "no-store" });
+      const json = (await response.json()) as CatalogFetchResponse;
+      colorsOk = response.ok && json?.ok !== false;
+      colorsErr = colorsOk
+        ? json?.meta?.err ?? null
+        : json?.meta?.err ?? json?.err ?? response.statusText ?? "Endpoint failed";
+      colorsCount = json?.meta?.count ?? (Array.isArray(json?.data) ? json.data.length : 0);
+      colorsSample = extractSample(json?.data);
+      if (colorsOk && Array.isArray(json?.data) && json.data.length > 0) {
+        const first = json.data[0] as { value?: string; label?: string };
+        colorName = first?.value ?? first?.label ?? null;
+      }
+    } catch (error) {
+      colorsOk = false;
+      colorsErr = error instanceof Error ? error.message : String(error);
+      colorsSample = null;
+    }
+
+    checks.push({
+      label: `colors-${collectionKey}`,
+      ok: colorsOk,
+      status: colorsOk ? 200 : 502,
+      count: colorsCount,
+      err: colorsErr,
+      sample: colorsSample,
+      usedUrl: colorsUrl,
+      params: { collection: collectionKey },
+    });
   } else {
     checks.push({
       label: "colors",
