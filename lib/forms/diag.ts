@@ -6,12 +6,12 @@ import {
   getDealersByRep,
   getCategories,
   getCollectionsByCategory,
-  getColorsByCollection,
   getSalesReps,
 } from "@/lib/forms/catalog";
 import { insertLossOpportunity, type NormalizedLossOpportunity } from "@/lib/forms/loss-opportunity";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { SafeResult } from "@/lib/utils";
+import type { CatalogFetchResponse } from "@/lib/types/catalog";
 
 export type FormsDiagCheck = {
   label: string;
