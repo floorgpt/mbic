@@ -56,6 +56,8 @@ type RunDiagOptions = {
   repId?: number | null;
   categoryKey?: string | null;
   collectionKey?: string | null;
+  baseUrl?: string;
+  skipColors?: boolean;
 };
 
 export async function runFormsDiagnostics(options?: RunDiagOptions): Promise<FormsDiagResult> {
@@ -67,6 +69,8 @@ export async function runFormsDiagnostics(options?: RunDiagOptions): Promise<For
   const requestedCollectionKey = options?.collectionKey
     ? options.collectionKey.trim() || null
     : null;
+  const baseUrl = options?.baseUrl ?? "https://cpf-mbic2.netlify.app";
+  const skipColors = options?.skipColors === true;
   const hasRepSelection = requestedRepId != null;
   const hasCategorySelection = Boolean(requestedCategoryKey);
   const hasCollectionSelection = Boolean(requestedCollectionKey);
@@ -135,40 +139,65 @@ export async function runFormsDiagnostics(options?: RunDiagOptions): Promise<For
 
   let colorName: string | null = null;
   if (collectionKey) {
-    const colorsUrl = `/api/forms/catalog/colors?collection=${encodeURIComponent(collectionKey)}`;
-    let colorsOk = false;
-    let colorsCount = 0;
-    let colorsErr: string | null = null;
-    let colorsSample: unknown = null;
-    try {
-      const response = await fetch(colorsUrl, { cache: "no-store" });
-      const json = (await response.json()) as CatalogFetchResponse;
-      colorsOk = response.ok && json?.ok !== false;
-      colorsErr = colorsOk
-        ? json?.meta?.err ?? null
-        : json?.meta?.err ?? json?.err ?? response.statusText ?? "Endpoint failed";
-      colorsCount = json?.meta?.count ?? (Array.isArray(json?.data) ? json.data.length : 0);
-      colorsSample = extractSample(json?.data);
-      if (colorsOk && Array.isArray(json?.data) && json.data.length > 0) {
-        const first = json.data[0] as { value?: string; label?: string };
-        colorName = first?.value ?? first?.label ?? null;
-      }
-    } catch (error) {
-      colorsOk = false;
-      colorsErr = error instanceof Error ? error.message : String(error);
-      colorsSample = null;
-    }
+    if (skipColors) {
+      checks.push({
+        label: `colors-${collectionKey}`,
+        ok: true,
+        status: 200,
+        count: 0,
+        err: "skipColors=true",
+        sample: null,
+        params: { collection: collectionKey, skipColors: "true" },
+      });
+    } else {
+      let colorsOk = false;
+      let colorsCount = 0;
+      let colorsErr: string | null = null;
+      let colorsSample: unknown = null;
+      let statusCode = 200;
+      let urlString = "";
 
-    checks.push({
-      label: `colors-${collectionKey}`,
-      ok: colorsOk,
-      status: colorsOk ? 200 : 502,
-      count: colorsCount,
-      err: colorsErr,
-      sample: colorsSample,
-      usedUrl: colorsUrl,
-      params: { collection: collectionKey },
-    });
+      try {
+        if (!baseUrl || !baseUrl.startsWith('http')) {
+          throw new Error(`Invalid baseUrl: "${baseUrl}" - must start with http:// or https://`);
+        }
+
+        const colorsUrl = new URL("/api/forms/catalog/colors", baseUrl);
+        colorsUrl.searchParams.set("collection", collectionKey);
+        urlString = colorsUrl.toString();
+
+        console.log(`[forms/diag] Fetching colors: ${urlString} (base=${baseUrl}, collection=${collectionKey})`);
+        const response = await fetch(urlString, { cache: "no-store" });
+        statusCode = response.status;
+        const json = (await response.json()) as CatalogFetchResponse;
+        colorsOk = response.ok && json?.ok !== false;
+        colorsErr = colorsOk
+          ? json?.meta?.err ?? null
+          : json?.meta?.err ?? json?.err ?? response.statusText ?? "Endpoint failed";
+        colorsCount = json?.meta?.count ?? (Array.isArray(json?.data) ? json.data.length : 0);
+        colorsSample = extractSample(json?.data);
+        if (colorsOk && Array.isArray(json?.data) && json.data.length > 0) {
+          const first = json.data[0] as { value?: string; label?: string };
+          colorName = first?.value ?? first?.label ?? null;
+        }
+      } catch (error) {
+        colorsOk = false;
+        colorsErr = error instanceof Error ? error.message : String(error);
+        colorsSample = null;
+        statusCode = 502;
+      }
+
+      checks.push({
+        label: `colors-${collectionKey}`,
+        ok: colorsOk,
+        status: colorsOk ? statusCode : statusCode || 502,
+        count: colorsCount,
+        err: colorsErr,
+        sample: colorsSample,
+        usedUrl: urlString || `[Failed to construct URL for collection: ${collectionKey}]`,
+        params: { collection: collectionKey },
+      });
+    }
   } else {
     checks.push({
       label: "colors",
