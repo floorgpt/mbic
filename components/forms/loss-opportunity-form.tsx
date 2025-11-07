@@ -167,6 +167,16 @@ export function LossOpportunityForm({
   const [collectionsState, setCollectionsState] =
     useState<CatalogState<CollectionOption>>(EMPTY_CATALOG);
   const [colorsState, setColorsState] = useState<CatalogState<ColorOption>>(EMPTY_CATALOG);
+  const canSubmit = useMemo(
+    () =>
+      Boolean(
+        values.repId &&
+          values.dealerId &&
+          values.categoryKey &&
+          values.collectionKey,
+      ),
+    [values.categoryKey, values.collectionKey, values.dealerId, values.repId],
+  );
   useEffect(() => {
     onSelectionChange?.({
       repId: values.repId,
@@ -298,8 +308,6 @@ export function LossOpportunityForm({
     if (!values.dealerId) nextErrors.dealerId = "Selecciona un dealer";
     if (!values.categoryKey) nextErrors.categoryKey = "Selecciona una categoría";
     if (!values.collectionKey) nextErrors.collectionKey = "Selecciona una colección";
-    if (!values.colorName) nextErrors.colorName = "Selecciona un color";
-
     const qty = parsePositiveNumber(values.requestedQty);
     if (!qty) {
       nextErrors.requestedQty = "Ingresa la cantidad perdida (mayor a 0)";
@@ -352,16 +360,14 @@ export function LossOpportunityForm({
       const result = await createLossOpportunity(payload);
       if (result.ok) {
         const id = (result as { id?: number | null }).id ?? null;
-        const webhook = (result as {
-          webhook?: { mode?: string; url?: string } | null;
-        }).webhook;
-        const modeLabel = webhook?.mode ? webhook.mode.toUpperCase() : "?";
-        const webhookUrl = webhook?.url ?? "sin URL";
         setStatus({
           type: "success",
-          text: `Pérdida registrada (#${id ?? "sin id"}). Webhook ${modeLabel} → ${webhookUrl}`,
+          text: id
+            ? `¡Pérdida registrada exitosamente! (ID: ${id})`
+            : "¡Pérdida registrada exitosamente!",
         });
         setErrors({});
+        // Reset form but keep rep and dealer selection
         setValues((prev) => ({
           ...prev,
           categoryKey: "",
@@ -529,8 +535,7 @@ export function LossOpportunityForm({
 
         <Field
           controlId="loss-color"
-          label="Color"
-          required
+          label="Color (opcional)"
           error={errors.colorName ?? colorsState.error}
         >
           <Select
@@ -651,10 +656,14 @@ export function LossOpportunityForm({
           Al enviar registramos la pérdida y notificamos a Sales Ops.
         </p>
         <div className="sticky bottom-4 z-10 md:static md:bottom-auto md:z-auto md:w-auto">
-          <Button type="submit" disabled={submitting} className="w-full md:w-auto shadow-sm">
-            {submitting ? "Enviando..." : "Registrar pérdida"}
-          </Button>
-        </div>
+        <Button
+          type="submit"
+          disabled={submitting || !canSubmit}
+          className="w-full md:w-auto shadow-sm"
+        >
+          {submitting ? "Enviando..." : "Registrar pérdida"}
+        </Button>
+      </div>
       </div>
     </form>
   );
