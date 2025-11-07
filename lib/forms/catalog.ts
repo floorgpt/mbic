@@ -20,6 +20,8 @@ import {
 type ColorRow = {
   color?: string | null;
   color_name?: string | null;
+  value?: string | null;
+  label?: string | null;
 };
 
 function ensureSupabaseError(label: string, error: unknown): never {
@@ -95,11 +97,15 @@ function mapColors(rows: ColorRow[] | null): ColorOption[] {
   const result: ColorOption[] = [];
   for (const row of rows) {
     const raw =
-      typeof row.color === "string"
-        ? row.color
-        : typeof row.color_name === "string"
-          ? row.color_name
-          : null;
+      typeof row.value === "string"
+        ? row.value
+        : typeof row.label === "string"
+          ? row.label
+          : typeof row.color === "string"
+            ? row.color
+            : typeof row.color_name === "string"
+              ? row.color_name
+              : null;
     if (!raw) continue;
     const normalized = raw.trim();
     if (!normalized) continue;
