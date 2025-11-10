@@ -135,6 +135,7 @@ export async function insertLossOpportunity(
         rep_id: payload.repId,
         lost_date: new Date().toISOString(),
         requested_qty: payload.requestedQty,
+        target_price: payload.targetPrice,
         potential_amount: payload.potentialAmount,
         due_to_stock: payload.reason === "no_stock",
         lost_reason: payload.reason,

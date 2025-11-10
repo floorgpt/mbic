@@ -50,6 +50,7 @@ export type LossOpportunityRow = {
   lost_date: string;
   category_key: string | null;
   requested_qty: number;
+  target_price: number | null;
   potential_amount: number;
   due_to_stock: boolean;
   lost_reason: string;
@@ -68,6 +69,7 @@ export type LossOpportunityInsert = {
   lost_date?: string;
   category_key?: string | null;
   requested_qty: number;
+  target_price?: number | null;
   potential_amount: number;
   due_to_stock?: boolean | null;
   lost_reason: string;
