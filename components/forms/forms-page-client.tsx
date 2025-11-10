@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Field } from "@/components/forms/field";
 import {
+  FutureSaleForm,
+  type FutureSaleSelection,
+} from "@/components/forms/future-sale-form";
+import {
   LossOpportunityForm,
   type LossOpportunitySelection,
 } from "@/components/forms/loss-opportunity-form";
@@ -187,14 +191,14 @@ export function FormsPageClient({
         chips.push({
           id: "colors",
           label: "Colores",
-          intent: "required",
+          intent: "optional",
           ...colors,
         });
       } else {
         chips.push({
           id: "colors",
           label: "Colores",
-          intent: "required",
+          intent: "optional",
           ok: true,
           status: 200,
           count: 0,
@@ -235,7 +239,7 @@ export function FormsPageClient({
     }
 
     combinedChips.forEach((chip) => {
-      if (chip.intent === "optional" && !chip.ok && chip.err) {
+      if (chip.intent === "optional" && chip.err) {
         messages.add(`${chip.label}: ${chip.err}`);
       }
     });
@@ -266,8 +270,6 @@ export function FormsPageClient({
           Comparte pérdidas de oportunidad y ventas futuras con Sales Ops.
         </p>
       </div>
-
-      <FormsStatusCard chips={combinedChips} messages={activeMessages} />
 
       <Card>
         <CardHeader>
@@ -305,21 +307,24 @@ export function FormsPageClient({
             />
           ) : null}
 
-          {selectedForm === "future" ? <FutureSalesComingSoon /> : null}
+          {selectedForm === "future" ? (
+            <FutureSaleForm
+              initialSalesReps={initialSalesReps}
+              initialCategories={initialCategories}
+              onCatalogStatus={handleCatalogStatus}
+              onSelectionChange={handleSelectionChange}
+            />
+          ) : null}
         </CardContent>
       </Card>
-    </div>
-  );
-}
 
-function FutureSalesComingSoon() {
-  return (
-    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-center">
-      <h3 className="font-montserrat text-lg font-semibold">Oportunidad futura</h3>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Estamos preparando este flujo para que compartas ventas futuras con Sales Ops. Próximamente
-        podrás registrar proyectos, fechas estimadas y cantidades planificadas.
-      </p>
+      <FormsStatusCard chips={combinedChips} messages={activeMessages} />
+
+      <div className="border-t border-border/30" />
+
+      <div className="text-center text-xs text-muted-foreground">
+        CPF Floors - Marketing & B/I Center
+      </div>
     </div>
   );
 }

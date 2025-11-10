@@ -38,11 +38,18 @@ These changes bring the backend queries in line with Supabase’s authoritative 
    - Shared marketing/sales widgets rely on `lib/supabase/queries.ts`, which now streams complete tables via the admin client.
 
 ## Remaining Risks & Next Steps
-1. **Deployment Environment**  
+1. **Deployment Environment**
    - Ensure Netlify has `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` available at build time; without them, server prerendering returns `TypeError: fetch failed`.
-2. **Cache Busting**  
-   - With React’s cache removed, add explicit ISR/`revalidate` policies if you want to control frequency of Supabase round trips while keeping the data current.
-3. **Verification**  
+2. **Cache Busting**
+   - With React's cache removed, add explicit ISR/`revalidate` policies if you want to control frequency of Supabase round trips while keeping the data current.
+3. **Verification**
    - After the next deploy, validate the live dashboard against the Supabase SQL snippet to confirm Revenue YTD and per-rep totals align with `$6,136,413.93`.
+4. **PostgREST 1000-Row Hard Limit** ⚠️ **CRITICAL**
+   - Supabase project has a **hard-coded 1,000-row limit** that cannot be bypassed with `.limit()` or `.range()`, even with service role key.
+   - Raw queries in `lib/db/sales.ts` return incomplete data for reps with >1,000 invoices (affects 7 of 13 reps).
+   - Example: Juan Pedro Boscan shows $389k in raw queries but actually has $1.6M (RPC confirms).
+   - **Solution**: Use RPC functions exclusively (already implemented in `lib/mbic-sales.ts` and `lib/mbic-supabase.ts`).
+   - **Action**: Deprecate or add pagination to `lib/db/sales.ts` and `lib/supabase/queries.ts`.
+   - See [supabase-postgrest-limit-issue.md](./supabase-postgrest-limit-issue.md) for full details and validation results.
 
 This memo consolidates the investigation to date and documents how the application now bridges Supabase data to the front-end. Share it with the expert for additional review or architectural changes.

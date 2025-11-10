@@ -24,6 +24,7 @@ cp .env.local.example .env.local
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key used server-side (profile page) |
 | `RETELL_AI_SECRET` | Secret token used to authorise Retell AI webhook calls |
 | `OPENAI_API_KEY` | OpenAI key for MBIC agent summaries |
+| `FORMS_STRICT_CATALOGS` | Controls POST validation for public forms (`false` = Trust-the-UI, recommended) |
 
 > **Note:** `SUPABASE_SERVICE_ROLE_KEY`, `RETELL_AI_SECRET`, and `OPENAI_API_KEY` are server-only secrets and must never be prefixed with `NEXT_PUBLIC_`.
 
@@ -188,6 +189,7 @@ The Sales Ops form is a public-facing capture flow that lands inside `public.los
 - **Diagnostics** are exposed via `GET /api/diag-forms`. Each check returns `{ label, ok, status, count, err, sample }`, making it easy to confirm catalog reachability (e.g. `collections-vinyl`, `colors-SpiritXL`, `loss-opportunity-insert`). Pass `?dryRun=false` to perform an insert + clean-up round trip.
 - **Settings → Forms tab** surfaces the public URL and both n8n webhook URLs (Test / Prod) with copy buttons. The active mode is read from `mbic_settings`.
 - **UI telemetry**: `/forms` renders a banner with the latest diagnostic counts (red badges flag failing checks) and logs `[forms] catalog:<action>` plus `[forms] api/<route>` events for server observability.
+- Production runs with `FORMS_STRICT_CATALOGS=false` (modo Trust-the-UI) to skip redundant catalog revalidation on submit; set to `true` only if you need to hard-enforce backend lookups.
 
 Quick sanity commands (all return JSON):
 
@@ -197,6 +199,8 @@ curl -s "https://cpf-mbic2.netlify.app/api/forms/catalog/categories" | jq '.data
 curl -s "https://cpf-mbic2.netlify.app/api/forms/catalog/collections?category=vinyl" | jq
 curl -s "https://cpf-mbic2.netlify.app/api/forms/catalog/colors?collection=SpiritXL" | jq
 curl -s https://cpf-mbic2.netlify.app/api/settings/webhooks | jq
+# Optional: skip color check in diag with `skipColors=true`
+curl -s 'https://cpf-mbic2.netlify.app/api/diag-forms?skipColors=true' | jq
 ```
 
 ### Failure Handling & Logging
@@ -236,3 +240,42 @@ The marketing page ships with lightweight fallback data (`lib/data/marketing.ts`
 4. Publish directory: `.next`
 
 Every push to `main` will trigger a Netlify deploy.
+
+### Supabase RPCs & Database Access
+
+| Module | RPC / Table | Parameters | Description / Usage |
+| --- | --- | --- | --- |
+| Dashboard & Sales (`lib/mbic-supabase.ts`, `lib/mbic-sales.ts`) | `sales_org_kpis_v2` | `from_date`, `to_date` | Company KPIs powering `/app/(dashboard)` summary cards. |
+|  | `sales_org_monthly_v2` | `from_date`, `to_date` | Monthly revenue trend for dashboard sparkline. |
+|  | `sales_org_top_dealers_v2` | `from_date`, `to_date`, `top_n` | Dealer leaderboard used in dashboard + `/sales` drawer. |
+|  | `sales_org_top_reps_v2` | `from_date`, `to_date`, `top_n` | Rep leaderboard cards/charts. |
+|  | `sales_category_totals_v2` | `from_date`, `to_date` | Category mix for pie/stacked charts. |
+|  | `sales_org_top_collections` | `from_date`, `to_date`, `top_n` | Collections stack (legacy marketing view). |
+|  | Tables: `sales_demo`, `customers_demo`, `sales_reps_demo`, `v_sales_norm` | various `select` calls | Base sales dataset used for drilldowns and validation helpers. |
+| Sales Operations (`lib/mbic-supabase-salesops.ts`) | `sales_ops_category_kpis` | `from`, `to` | Category KPI tiles in `/sales-ops`. |
+|  | `sales_ops_category_kpis_monthly` | `from`, `to` | Monthly economics chart. |
+|  | `sales_ops_fill_rate` | `from`, `to` | Fill rate KPI card. |
+|  | `sales_ops_import_lead_time` | `from`, `to` | Import lead time KPI. |
+|  | `sales_ops_forecast_accuracy` | `from`, `to` | Forecast accuracy KPI. |
+|  | `sales_ops_inventory_turnover` | `from`, `to` | Inventory turnover KPI. |
+|  | `sales_ops_dealer_bounce_rate` | `from`, `to` | Dealer bounce metric. |
+|  | `ops_reports_made_by_month` | `from`, `to` | Reports timeline chart. |
+|  | `ops_comm_consistency_index` | `from`, `to` | Communications consistency tile. |
+|  | `sales_ops_kpis_by_collection` | `from`, `to` | Top collection leaderboard + drawer. |
+|  | `sales_ops_kpis_monthly_by_collection` | `from`, `to` | Margin trend per collection. |
+|  | `sales_ops_collections_by_dealer` | `p_collection`, `from`, `to` | Dealer drilldown API `/api/collection-by-dealer`. |
+|  | `list_future_sale_opps_open` | `from`, `to` | Future opportunity table. |
+|  | `list_incoming_stock_by_collection` | `from`, `to` | Incoming stock table. |
+| Forms & Catalog (`lib/forms/catalog.ts`) | `get_colors_by_collection_v2` | `p_collection` | Color catalog for `/forms` (also exposed via `/api/forms/catalog/colors`). |
+|  | Tables: `sales_reps_demo`, `customers_demo`, `product_categories`, `product_category_collection_map` | server selects | Populate dependent dropdowns (rep → dealer → category → collection) in public forms. |
+|  | `loss_opportunities` | insert/select | POST `/api/forms/loss-opportunity` stores submissions then triggers n8n webhook. |
+| Diagnostics & Utilities | `/api/diag`, `/api/diag-salesops` | query params `from`, `to` | Server routes hitting the same RPC suites as dashboard and sales-ops for health checks. |
+|  | `/api/diag-forms` | `repId`, `category`, `collection`, `dryRun` | Calls catalog endpoints + optional insert dry-run to surface form health. |
+|  | Settings (`lib/forms/settings.ts`, `/api/settings/webhooks`) | Tables: `mbic_settings` | GET/PUT used to persist n8n webhook URLs + active mode. |
+
+> For quick verification in production:
+>
+> ```bash
+> curl -s 'https://cpf-mbic2.netlify.app/api/diag-forms?repId=13&category=vinyl&collection=SpiritXL' | jq
+> curl -s 'https://cpf-mbic2.netlify.app/api/forms/catalog/colors?collection=SpiritXL' | jq '.meta'
+> ```

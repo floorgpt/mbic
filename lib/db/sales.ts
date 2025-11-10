@@ -190,7 +190,8 @@ async function fetchCustomerNames(customerIds: number[]): Promise<Map<number, st
   const { data, error } = await supabase
     .from("customers_demo")
     .select("customer_id, dealer_name")
-    .in("customer_id", customerIds);
+    .in("customer_id", customerIds)
+    .limit(1000000);
 
   if (error) {
     throw error;
@@ -358,7 +359,8 @@ async function fetchRepNames(repIds: number[]): Promise<Map<number, string>> {
   const { data, error } = await supabase
     .from("sales_reps_demo")
     .select("rep_id, rep_name")
-    .in("rep_id", repIds);
+    .in("rep_id", repIds)
+    .limit(1000000);
 
   if (error) throw error;
 

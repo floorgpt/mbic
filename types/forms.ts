@@ -41,6 +41,23 @@ export type LossOpportunityPayload = {
   expectedSku?: string | null;
 };
 
+export type FutureSalePayload = {
+  projectName: string;
+  repId: number;
+  dealerId: number;
+  categoryKey: string | null;
+  collectionKey: string | null;
+  colorName: string | null;
+  expectedQty: number;
+  expectedUnitPrice: number;
+  potentialAmount: number;
+  probabilityPct: number; // 0-100
+  expectedCloseDate: string | null; // ISO date
+  neededByDate: string | null; // ISO date
+  notes: string | null;
+  expectedSku: string | null;
+};
+
 export type FormsWebhookMode = "test" | "prod";
 
 export type FormsWebhookUrls = {

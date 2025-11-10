@@ -81,6 +81,46 @@ export type LossOpportunityInsert = {
   sku?: string | null;
 };
 
+export type FutureSaleOpportunityRow = {
+  id: number;
+  project_name: string;
+  dealer_id: number;
+  rep_id: number;
+  expected_close_date: string | null;
+  needed_by_date: string | null;
+  expected_sku: string | null;
+  expected_qty: number;
+  expected_unit_price: number | null;
+  probability_pct: number;
+  ops_stock_confirmed: boolean;
+  ops_confirmed_at: string | null;
+  status: string;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FutureSaleOpportunityInsert = {
+  id?: number;
+  project_name: string;
+  dealer_id: number;
+  rep_id: number;
+  expected_close_date?: string | null;
+  needed_by_date?: string | null;
+  expected_sku?: string | null;
+  expected_qty: number;
+  expected_unit_price?: number | null;
+  probability_pct?: number;
+  ops_stock_confirmed?: boolean;
+  ops_confirmed_at?: string | null;
+  status?: string;
+  notes?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type MbicSettingRow = {
   key: string;
   value: Json | null;
