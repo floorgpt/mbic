@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Field } from "@/components/forms/field";
-import {
-  FutureSaleForm,
-  type FutureSaleSelection,
-} from "@/components/forms/future-sale-form";
+import { FutureSaleForm } from "@/components/forms/future-sale-form";
 import {
   LossOpportunityForm,
   type LossOpportunitySelection,
