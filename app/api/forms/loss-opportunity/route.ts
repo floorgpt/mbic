@@ -18,6 +18,8 @@ import type { LossOpportunityPayload } from "@/types/forms";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const STRICT = process.env.FORMS_STRICT_CATALOGS === "true";
+
 export async function POST(request: Request) {
   let payload: LossOpportunityPayload | null = null;
 
@@ -48,106 +50,119 @@ export async function POST(request: Request) {
 
   try {
     const normalized = validation.data;
-
-    const catalogIssues: string[] = [];
-    const missingCatalogs: string[] = [];
-
-    const repsSafe = await getSalesReps();
-    if (!repsSafe._meta.ok) {
-      catalogIssues.push(`sales-reps: ${repsSafe._meta.err ?? "offline"}`);
-    }
-    const repMatch = repsSafe.data.find((rep) => rep.id === normalized.repId);
-    if (!repMatch) {
-      missingCatalogs.push(`rep:${normalized.repId}`);
-    }
-
-    const dealersSafe = await getDealersByRep(normalized.repId);
-    if (dealersSafe._meta.ok) {
-      const dealerMatch = dealersSafe.data.find((dealer) => dealer.id === normalized.dealerId);
-      if (!dealerMatch) {
-        missingCatalogs.push(`dealer:${normalized.dealerId}`);
-      }
-    } else {
-      console.warn("[forms] api/loss-opportunity:dealers-offline", dealersSafe._meta);
-    }
-
-    const categoriesSafe = await getCategories();
-    if (!categoriesSafe._meta.ok) {
-      catalogIssues.push(`categories: ${categoriesSafe._meta.err ?? "offline"}`);
-    }
-    const categoryKey = normalized.categoryKey ?? "";
-    const categoryMatch = categoriesSafe.data.find(
-      (category) => category.key.toLowerCase() === categoryKey.toLowerCase(),
-    );
-    if (!categoryMatch) {
-      missingCatalogs.push(`category:${categoryKey || "undefined"}`);
-    }
-
-    const collectionsSafe = await getCollectionsByCategory(categoryKey);
-    if (!collectionsSafe._meta.ok) {
-      catalogIssues.push(
-        `collections:${categoryKey || "undefined"}: ${collectionsSafe._meta.err ?? "offline"}`,
-      );
-    } else {
-      if ((collectionsSafe.data?.length ?? 0) === 0) {
-        missingCatalogs.push(`collections-empty:${categoryKey}`);
-      }
-    }
-    const collectionKey = normalized.collectionKey ?? "";
-    if (collectionsSafe._meta.ok) {
-      const collectionMatch = collectionsSafe.data.find(
-        (collection) => collection.key.toLowerCase() === collectionKey.toLowerCase(),
-      );
-      if (!collectionMatch) {
-        missingCatalogs.push(`collection:${collectionKey || "undefined"}`);
-      }
-    }
-
-    const colorsSafe = await getColorsByCollection(collectionKey);
-    if (!colorsSafe._meta.ok) {
-      catalogIssues.push(
-        `colors:${collectionKey || "undefined"}: ${colorsSafe._meta.err ?? "offline"}`,
-      );
-    } else {
-      if ((colorsSafe.data?.length ?? 0) === 0) {
-        missingCatalogs.push(`colors-empty:${collectionKey}`);
-      }
-    }
-    const colorName = normalized.colorName ?? "";
-    if (colorsSafe._meta.ok) {
-      const colorMatch = colorsSafe.data.find((color) => {
-        const value = color.value?.toLowerCase?.() ?? "";
-        const label = color.label?.toLowerCase?.() ?? "";
-        const target = colorName.toLowerCase();
-        return value === target || label === target;
-      });
-      if (!colorMatch) {
-        missingCatalogs.push(`color:${colorName || "undefined"}`);
-      }
-    }
-
-    if (catalogIssues.length > 0) {
-      console.error("[forms] api/loss-opportunity:catalog-offline", { catalogIssues });
+    normalized.categoryKey = normalized.categoryKey?.trim() ?? null;
+    const trimmedCollection = normalized.collectionKey?.trim() ?? null;
+    if (!trimmedCollection) {
       return NextResponse.json(
         {
           ok: false,
-          err: "Catálogos fuera de línea",
-          details: catalogIssues,
-        },
-        { status: 502 },
-      );
-    }
-
-    if (missingCatalogs.length > 0) {
-      console.warn("[forms] api/loss-opportunity:missing-catalog", { missingCatalogs });
-      return NextResponse.json(
-        {
-          ok: false,
-          err: "Catálogos incompletos",
-          missing: missingCatalogs,
+          err: "collection es requerida",
         },
         { status: 400 },
       );
+    }
+    normalized.collectionKey = trimmedCollection;
+    normalized.colorName = normalized.colorName?.trim() || null;
+
+    if (STRICT) {
+      const catalogIssues: string[] = [];
+      const missingCatalogs: string[] = [];
+
+      const repsSafe = await getSalesReps();
+      if (!repsSafe._meta.ok) {
+        catalogIssues.push(`sales-reps: ${repsSafe._meta.err ?? "offline"}`);
+      }
+      const repMatch = repsSafe.data.find((rep) => rep.id === normalized.repId);
+      if (!repMatch) {
+        missingCatalogs.push(`rep:${normalized.repId}`);
+      }
+
+      const dealersSafe = await getDealersByRep(normalized.repId);
+      if (dealersSafe._meta.ok) {
+        const dealerMatch = dealersSafe.data.find((dealer) => dealer.id === normalized.dealerId);
+        if (!dealerMatch) {
+          missingCatalogs.push(`dealer:${normalized.dealerId}`);
+        }
+      } else {
+        console.warn("[forms] api/loss-opportunity:dealers-offline", dealersSafe._meta);
+      }
+
+      const categoriesSafe = await getCategories();
+      if (!categoriesSafe._meta.ok) {
+        catalogIssues.push(`categories: ${categoriesSafe._meta.err ?? "offline"}`);
+      }
+      const categoryKey = normalized.categoryKey ?? "";
+      const categoryMatch = categoriesSafe.data.find(
+        (category) => category.key.toLowerCase() === categoryKey.toLowerCase(),
+      );
+      if (!categoryMatch) {
+        missingCatalogs.push(`category:${categoryKey || "undefined"}`);
+      }
+
+      const collectionsSafe = await getCollectionsByCategory(categoryKey);
+      if (!collectionsSafe._meta.ok) {
+        catalogIssues.push(
+          `collections:${categoryKey || "undefined"}: ${collectionsSafe._meta.err ?? "offline"}`,
+        );
+      } else if ((collectionsSafe.data?.length ?? 0) === 0) {
+        missingCatalogs.push(`collections-empty:${categoryKey}`);
+      }
+
+      const collectionKey = normalized.collectionKey ?? "";
+      if (collectionsSafe._meta.ok) {
+        const collectionMatch = collectionsSafe.data.find(
+          (collection) => collection.key.toLowerCase() === collectionKey.toLowerCase(),
+        );
+        if (!collectionMatch) {
+          missingCatalogs.push(`collection:${collectionKey || "undefined"}`);
+        }
+      }
+
+      const colorsSafe = await getColorsByCollection(collectionKey);
+      if (!colorsSafe._meta.ok) {
+        catalogIssues.push(
+          `colors:${collectionKey || "undefined"}: ${colorsSafe._meta.err ?? "offline"}`,
+        );
+      } else if ((colorsSafe.data?.length ?? 0) === 0) {
+        missingCatalogs.push(`colors-empty:${collectionKey}`);
+      }
+
+      const colorName = normalized.colorName ?? "";
+      if (colorsSafe._meta.ok && colorName) {
+        const colorMatch = colorsSafe.data.find((color) => {
+          const value = color.value?.toLowerCase?.() ?? "";
+          const label = color.label?.toLowerCase?.() ?? "";
+          const target = colorName.toLowerCase();
+          return value === target || label === target;
+        });
+        if (!colorMatch) {
+          missingCatalogs.push(`color:${colorName}`);
+        }
+      }
+
+      if (catalogIssues.length > 0) {
+        console.error("[forms] api/loss-opportunity:catalog-offline", { catalogIssues });
+        return NextResponse.json(
+          {
+            ok: false,
+            err: "Catálogos fuera de línea",
+            details: catalogIssues,
+          },
+          { status: 502 },
+        );
+      }
+
+      if (missingCatalogs.length > 0) {
+        console.warn("[forms] api/loss-opportunity:missing-catalog", { missingCatalogs });
+        return NextResponse.json(
+          {
+            ok: false,
+            err: "Catálogos incompletos",
+            missing: missingCatalogs,
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const insertResult = await insertLossOpportunity(normalized);
@@ -174,20 +189,12 @@ export async function POST(request: Request) {
     );
 
     if (!webhookResult.ok) {
-      console.error("[forms] api/loss-opportunity:webhook-failed", webhookResult);
-      return NextResponse.json(
-        {
-          ok: false,
-          err: webhookResult.err ?? "El webhook no respondió",
-          id: insertResult.data.id,
-          webhook: {
-            mode,
-            url,
-            status: webhookResult.status ?? null,
-          },
-        },
-        { status: 502 },
-      );
+      console.warn("[forms] api/loss-opportunity:webhook-failed", {
+        ...webhookResult,
+        note: "Data was saved successfully, but webhook notification failed",
+      });
+      // Don't block the user - data was saved successfully
+      // Just log the webhook failure
     }
 
     console.log("[forms] api/loss-opportunity:success", {
