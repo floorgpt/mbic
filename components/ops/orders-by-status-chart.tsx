@@ -42,7 +42,12 @@ export function OrdersByStatusChart({ data, loading }: OrdersByStatusChartProps)
 
   const total = data.delivered + data.in_progress + data.not_delivered;
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  type TooltipProps = {
+    active?: boolean;
+    payload?: Array<{ name: string; value: number; color: string }>;
+  };
+
+  const CustomTooltip = ({ active, payload }: TooltipProps) => {
     if (active && payload && payload.length) {
       const item = payload[0];
       const percentage = ((item.value / total) * 100).toFixed(1);

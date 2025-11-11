@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { Eye, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { fmtPct0, fmtUSD0, fmtUSDCompact } from "@/lib/format";

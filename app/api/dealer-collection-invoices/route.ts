@@ -31,7 +31,7 @@ export async function GET(request: Request) {
       .eq("customer_id", dealerId)
       .single();
 
-    const dealerName = dealerData?.dealer_name ?? `Dealer-${dealerId}`;
+    const dealerName = (dealerData as { dealer_name: string } | null)?.dealer_name ?? `Dealer-${dealerId}`;
 
     // Get all invoices for this dealer and collection
     const { data: invoices, error } = await supabase
@@ -55,8 +55,17 @@ export async function GET(request: Request) {
     }
 
     // Generate CSV
+    type InvoiceRow = {
+      invoice_date: string;
+      invoice_number: string | null;
+      sku: string | null;
+      color: string | null;
+      invoice_amount: number;
+      collection: string | null;
+    };
+
     const headers = ["Invoice Date", "Invoice Number", "SKU", "Color", "Amount", "Collection"];
-    const rows = invoices?.map((inv) => [
+    const rows = (invoices as InvoiceRow[] | null)?.map((inv) => [
       inv.invoice_date,
       inv.invoice_number ?? "",
       inv.sku ?? "",

@@ -28,7 +28,12 @@ export function OrderAccuracyChart({ data, loading }: OrderAccuracyChartProps) {
     );
   }
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  type TooltipProps = {
+    active?: boolean;
+    payload?: Array<{ payload: OrderAccuracyData }>;
+  };
+
+  const CustomTooltip = ({ active, payload }: TooltipProps) => {
     if (active && payload && payload.length) {
       const item = payload[0].payload;
       return (

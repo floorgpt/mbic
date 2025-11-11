@@ -277,9 +277,9 @@ export async function POST(request: Request) {
     }
 
     // Insert new data
-    const { data, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from("logistics_kpis")
-      .insert(parsedRows)
+      .insert(parsedRows as never[])
       .select();
 
     if (insertError) {

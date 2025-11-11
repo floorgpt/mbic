@@ -44,7 +44,7 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log(`[dealer-snapshot] Found dealer: ${dealerData.dealer_name}`);
+    console.log(`[dealer-snapshot] Found dealer: ${(dealerData as { dealer_name: string }).dealer_name}`);
 
     // Get sales rep from sales_demo (rep is associated with sales, not dealers directly)
     const { data: salesWithRep, error: repLookupError } = await supabase
@@ -60,10 +60,11 @@ export async function GET(request: Request) {
       console.error("[dealer-snapshot] rep-lookup:error", repLookupError);
     }
 
-    const repId = salesWithRep?.rep_id ?? null;
+    const repId = (salesWithRep as { rep_id: number } | null)?.rep_id ?? null;
     console.log(`[dealer-snapshot] Found rep_id: ${repId}`);
 
     // Get sales rep name if we found a rep
+    type RepRow = { rep_id: number; rep_name: string };
     const { data: repData } = repId
       ? await supabase
           .from("sales_reps_demo")
@@ -72,7 +73,8 @@ export async function GET(request: Request) {
           .single()
       : { data: null };
 
-    console.log(`[dealer-snapshot] Rep data:`, repData);
+    const typedRepData = repData as RepRow | null;
+    console.log(`[dealer-snapshot] Rep data:`, typedRepData);
 
     // Get collection revenue for this dealer
     const { data: collectionSales, error: collectionError } = await supabase
@@ -87,7 +89,9 @@ export async function GET(request: Request) {
       console.error("[dealer-snapshot] collection-sales:error", collectionError);
     }
 
-    const collectionRevenue = collectionSales?.reduce(
+    type SaleRow = { invoice_amount: number };
+
+    const collectionRevenue = (collectionSales as SaleRow[] | null)?.reduce(
       (sum, sale) => sum + Number(sale.invoice_amount),
       0,
     ) ?? 0;
@@ -104,7 +108,7 @@ export async function GET(request: Request) {
       console.error("[dealer-snapshot] total-sales:error", totalError);
     }
 
-    const totalRevenue = totalSales?.reduce(
+    const totalRevenue = (totalSales as SaleRow[] | null)?.reduce(
       (sum, sale) => sum + Number(sale.invoice_amount),
       0,
     ) ?? 0;
@@ -114,13 +118,15 @@ export async function GET(request: Request) {
     // Get invoice count for CSV download
     const invoiceCount = collectionSales?.length ?? 0;
 
+    const typedDealerData = dealerData as { customer_id: number; dealer_name: string };
+
     return NextResponse.json({
       ok: true,
       data: {
-        dealer_id: dealerData.customer_id,
-        dealer_name: dealerData.dealer_name,
+        dealer_id: typedDealerData.customer_id,
+        dealer_name: typedDealerData.dealer_name,
         rep_id: repId,
-        rep_name: repData?.rep_name ?? "Unknown",
+        rep_name: typedRepData?.rep_name ?? "Unknown",
         collection,
         collection_revenue: collectionRevenue,
         total_revenue: totalRevenue,

@@ -16,10 +16,10 @@ import {
   type ForecastAccuracyRow,
   type FutureOpportunityRow,
   type ImportLeadTimeRow,
-  type IncomingStockRow,
   type InventoryTurnoverRow,
   type ReportsByMonthRow,
 } from "@/types/salesops";
+import type { IncomingStockRow } from "@/types/ops";
 
 type RpcParams = Record<string, unknown>;
 type RawRow = Record<string, unknown>;
@@ -208,13 +208,33 @@ function mapFutureOpportunityRow(row: RawRow): FutureOpportunityRow {
   };
 }
 
+function readIncomingStockStatus(row: RawRow, keys: string[]): IncomingStockRow["eta_status"] {
+  const value = pickValue<string>(row, keys, "pending") ?? "pending";
+  const validStatuses = ["pending", "in_transit", "arrived", "delayed"];
+  return validStatuses.includes(value) ? (value as IncomingStockRow["eta_status"]) : "pending";
+}
+
 function mapIncomingStockRow(row: RawRow): IncomingStockRow {
   return {
+    id: readNumber(row, ["id"]),
+    master_category: readNullableString(row, ["master_category"]),
+    category: readNullableString(row, ["category"]),
     collection: readString(row, ["collection", "collection_name"]),
-    sku: readString(row, ["sku", "product_sku"]),
-    qty: readNumber(row, ["qty", "quantity"]),
-    eta_date: readNullableString(row, ["eta_date", "eta"]),
+    color: readNullableString(row, ["color"]),
+    sku: readNullableString(row, ["sku", "product_sku"]),
+    quantity: readNumber(row, ["qty", "quantity"]),
+    rate: pickValue(row, ["rate"]) != null ? readNumber(row, ["rate"]) : null,
+    stock_value: pickValue(row, ["stock_value"]) != null ? readNumber(row, ["stock_value"]) : null,
+    incoming_from: readNullableString(row, ["incoming_from"]),
+    destination_port: readNullableString(row, ["destination_port"]),
+    eta_status: readIncomingStockStatus(row, ["eta_status", "status"]),
+    eta_arrival_date: readNullableString(row, ["eta_date", "eta_arrival_date", "eta"]),
     received_at: readNullableString(row, ["received_at", "arrived_at"]),
+    notes: readNullableString(row, ["notes"]),
+    created_at: readString(row, ["created_at"]),
+    updated_at: readString(row, ["updated_at"]),
+    created_by: readNullableString(row, ["created_by"]),
+    updated_by: readNullableString(row, ["updated_by"]),
   };
 }
 

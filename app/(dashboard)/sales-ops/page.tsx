@@ -40,10 +40,10 @@ import type {
   ForecastAccuracyRow,
   FutureOpportunityRow,
   ImportLeadTimeRow,
-  IncomingStockRow,
   InventoryTurnoverRow,
   ReportsByMonthRow,
 } from "@/types/salesops";
+import type { IncomingStockRow } from "@/types/ops";
 import type { PanelMeta, SafeResult } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -450,8 +450,8 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
   });
 
   const incomingStock = incomingStockState.data.sort((a, b) => {
-    const dateA = a.eta_date ?? "";
-    const dateB = b.eta_date ?? "";
+    const dateA = a.eta_arrival_date ?? "";
+    const dateB = b.eta_arrival_date ?? "";
     return dateA.localeCompare(dateB);
   });
 

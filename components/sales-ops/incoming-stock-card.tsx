@@ -27,7 +27,7 @@ export function IncomingStockCard({ incomingStock }: IncomingStockCardProps) {
             Total Inbound
           </p>
           <p className="font-montserrat text-2xl font-semibold tabular-nums text-foreground">
-            {fmtCompact(incomingStock.reduce((sum, row) => sum + row.qty, 0))} SqFt
+            {fmtCompact(incomingStock.reduce((sum, row) => sum + row.quantity, 0))} SqFt
           </p>
         </div>
         <div className="rounded-xl border border-muted/40 bg-muted/20 p-4">
@@ -47,7 +47,7 @@ export function IncomingStockCard({ incomingStock }: IncomingStockCardProps) {
                 const collectionTotals = new Map<string, number>();
                 incomingStock.forEach((row) => {
                   const current = collectionTotals.get(row.collection) || 0;
-                  collectionTotals.set(row.collection, current + row.qty);
+                  collectionTotals.set(row.collection, current + row.quantity);
                 });
                 return Array.from(collectionTotals.entries()).map(([name, value]) => ({
                   name,
@@ -66,7 +66,7 @@ export function IncomingStockCard({ incomingStock }: IncomingStockCardProps) {
                 const collectionTotals = new Map<string, number>();
                 incomingStock.forEach((row) => {
                   const current = collectionTotals.get(row.collection) || 0;
-                  collectionTotals.set(row.collection, current + row.qty);
+                  collectionTotals.set(row.collection, current + row.quantity);
                 });
                 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#10b981', '#06b6d4', '#f59e0b'];
                 return Array.from(collectionTotals.entries()).map((_, index) => (

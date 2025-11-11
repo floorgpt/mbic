@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { X, Download, ExternalLink, TrendingUp, DollarSign, Percent, FileText } from "lucide-react";
+import { Download, ExternalLink, TrendingUp, DollarSign, Percent } from "lucide-react";
 
 import {
   Dialog,
@@ -213,7 +213,7 @@ export function DealerSnapshotModal({
                     {fmtPct0(data.collection_share_pct)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    of dealer's total purchases
+                    of dealer&apos;s total purchases
                   </p>
                 </div>
                 {/* Visual bar */}

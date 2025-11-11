@@ -33,9 +33,9 @@ export async function POST() {
     }
 
     // Insert dummy data
-    const { data, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from("logistics_kpis")
-      .insert(DUMMY_DATA)
+      .insert(DUMMY_DATA as never[])
       .select();
 
     if (insertError) {

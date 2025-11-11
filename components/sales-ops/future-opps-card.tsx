@@ -335,7 +335,7 @@ export function FutureOppsCard({ opportunities }: FutureOppsCardProps) {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(_, name?: string | number, item) => {
+                    formatter={(_, name?: string | number, item?) => {
                       const data = item?.payload as CollectionSlice | ColorSlice | undefined;
                       const label = data?.tooltipLabel ?? (typeof name === "string" ? name : String(name ?? ""));
                       return ["", label];
