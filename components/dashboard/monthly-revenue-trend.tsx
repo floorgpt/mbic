@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -30,8 +31,19 @@ type Props = {
 };
 
 export function MonthlyRevenueTrend({ data }: Props) {
-  if (!data.length) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!data || !data.length) {
     return <div className="h-[260px] animate-pulse rounded-xl bg-muted/40 md:h-[300px]" />;
+  }
+
+  // Prevent SSR hydration mismatch by only rendering chart on client
+  if (!isMounted) {
+    return <div className="h-[300px] w-full" />;
   }
 
   return (

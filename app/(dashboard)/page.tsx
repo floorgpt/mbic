@@ -38,7 +38,7 @@ import {
   type OrgKpis,
   type MonthlyPoint,
 } from "@/lib/mbic-supabase";
-import { fmtPct0, fmtUSD0 } from "@/lib/format";
+import { fmtPct0, fmtUSD0, fmtUSDCompact } from "@/lib/format";
 import { formatNumber } from "@/lib/utils/format";
 import { cn, getIcon, type PanelMeta, type SafeResult } from "@/lib/utils";
 
@@ -291,12 +291,17 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const grossMarginPct = toPercent(grossProfit.margin_pct ?? 0);
   const fillRatePct = toPercent(fillRateState.data.pct ?? 0);
 
-  const latestEngagement = engagementState.data.at(-1) ?? {
-    active_cnt: 0,
-    inactive_cnt: 0,
-    total_assigned: 0,
-    active_pct: 0,
-  };
+  // Get the latest engagement data, skipping any months with zero active dealers
+  const validEngagement = engagementState.data.filter((row) => row.active_cnt > 0 || row.active_pct > 0);
+  const latestEngagement = validEngagement.length > 0
+    ? validEngagement[validEngagement.length - 1]
+    : {
+        active_cnt: 0,
+        inactive_cnt: 0,
+        total_assigned: 0,
+        active_pct: 0,
+        month: "",
+      };
 
   const filteredCategories = categoriesState.data.filter(
     (category) => category.category_key !== "__UNMAPPED__",
@@ -333,8 +338,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     ? `${fmtUSD0(grossProfit.amount)} gross profit`
     : "Data available soon";
   const activeDealersValue = formatNumber(kpisState.data.unique_dealers ?? 0);
+  const calculatedActivePct = latestEngagement.total_assigned > 0
+    ? (latestEngagement.active_cnt / latestEngagement.total_assigned) * 100
+    : 0;
   const activeDealersSubtitle = engagementState.meta.ok
-    ? `${formatNumber(latestEngagement.total_assigned ?? 0)} total assigned • ${fmtPct0(latestEngagement.active_pct ?? 0)} active`
+    ? `${formatNumber(latestEngagement.total_assigned ?? 0)} total assigned • ${fmtPct0(calculatedActivePct)} active`
     : "Data available soon";
   const fillRateValue = fillRateState.meta.ok ? fmtPct0(fillRatePct) : "— %";
   const fillRateSubtitle = fillRateState.meta.ok ? "Average order fill rate" : "Data available soon";
@@ -360,7 +368,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 md:gap-6">
         <KpiCard
           title="Gross Revenue"
-          value={fmtUSD0(totalRevenue)}
+          value={fmtUSDCompact(totalRevenue)}
           subtitle={grossRevenueSubtitle}
           icon={TrendingUp}
           statusBadge={<PanelFailureBadge meta={kpisState.meta} />}
@@ -477,6 +485,19 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </CardContent>
       </Card>
 
+      <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+        <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+          <div>
+            <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Dealer Engagement Heatmap</CardTitle>
+            <p className="text-sm text-muted-foreground">Trailing monthly activity excluding distribution partners.</p>
+          </div>
+          <PanelFailureBadge meta={engagementState.meta} />
+        </CardHeader>
+        <CardContent className="p-4 sm:p-6">
+          <DealerHeatmap data={engagementState.data ?? []} />
+        </CardContent>
+      </Card>
+
       <section className="grid gap-6 lg:grid-cols-2">
         <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
           <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
@@ -586,19 +607,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardContent>
         </Card>
       </section>
-
-      <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
-        <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-          <div>
-            <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Dealer Engagement Heatmap</CardTitle>
-            <p className="text-sm text-muted-foreground">Trailing monthly activity excluding distribution partners.</p>
-          </div>
-          <PanelFailureBadge meta={engagementState.meta} />
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6">
-          <DealerHeatmap data={engagementState.data ?? []} />
-        </CardContent>
-      </Card>
     </div>
   );
 }

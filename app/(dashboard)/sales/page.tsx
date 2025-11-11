@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils/format";
+import { fmtUSDCompact } from "@/lib/format";
 import { fetchSalesReps } from "@/lib/supabase/queries";
 import { fetchRepSalesData } from "@/lib/db/sales";
 import { validateLindaFlooring } from "@/lib/db/sales-validation";
@@ -112,7 +113,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Total Revenue"
-          value={formatCurrency(totalRevenue)}
+          value={fmtUSDCompact(totalRevenue)}
           subtitle={`${formatNumber(totalInvoices)} invoices`}
         />
         <KpiCard
