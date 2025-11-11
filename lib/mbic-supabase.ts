@@ -26,15 +26,20 @@ function normalizeCollectionName(value: unknown): string {
 
 
 function logRpc(fn: string, params: Record<string, unknown>, error?: unknown) {
-  console.error(
-    JSON.stringify({
-      at: "mbic-supabase",
-      fn,
-      params,
-      ok: !error,
-      error: error ? String((error as Error)?.message ?? error) : null,
-    }),
-  );
+  const logData = {
+    at: "mbic-supabase",
+    fn,
+    params,
+    ok: !error,
+    error: error ? String((error as Error)?.message ?? error) : null,
+  };
+
+  // Only use console.error for actual errors, console.log for successful calls
+  if (error) {
+    console.error(JSON.stringify(logData));
+  } else {
+    console.log(JSON.stringify(logData));
+  }
 }
 
 async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
@@ -438,6 +443,7 @@ export async function getTopCollectionsSafe(from: DateISO, to: DateISO): Promise
     callRpc<Array<Record<string, NumericLike | string>>>("sales_org_top_collections", {
       from_date: from,
       to_date: to,
+      top_n: 20,
     }),
     "sales_org_top_collections",
     [],
@@ -453,7 +459,7 @@ export async function getTopCollectionsSafe(from: DateISO, to: DateISO): Promise
           : typeof row.collection_norm === "string"
             ? row.collection_norm
             : "Collection",
-      lifetime_sales: asNumber(row.lifetime_sales ?? row.total_sales ?? row.amount ?? row.sum, 0),
+      lifetime_sales: asNumber(row.lifetime_sales ?? row.revenue ?? row.total_sales ?? row.amount ?? row.sum, 0),
       share_pct: asNumber(row.share_pct ?? row.share ?? 0, 0),
     }));
     return {

@@ -175,23 +175,36 @@ function mapCollectionMonthlyRow(row: RawRow): CollectionMonthlyRow {
 function mapCollectionDealerRow(row: RawRow): CollectionDealerRow {
   return {
     dealer: readString(row, ["dealer", "dealer_name"]),
+    dealer_id: readNumber(row, ["dealer_id", "customer_id"]),
     revenue: readNumber(row, ["revenue", "gross_revenue"]),
     avg_price: readNumber(row, ["avg_price", "average_price"]),
     avg_cogs: readNumber(row, ["avg_cogs", "average_cogs", "cogs"]),
     gross_margin: readNumber(row, ["gross_margin", "margin_pct", "margin_percent"]),
     gross_profit: readNumber(row, ["gross_profit", "profit"]),
+    preferred_color: readString(row, ["preferred_color", "color"], "N/A"),
+    buying_power_pct: readNumber(row, ["buying_power_pct", "buying_power"], 0),
   };
 }
 
 function mapFutureOpportunityRow(row: RawRow): FutureOpportunityRow {
   return {
+    id: readNumber(row, ["id"]),
     project_name: readString(row, ["project_name", "project"]),
     expected_sku: readString(row, ["expected_sku", "sku"]),
     expected_qty: readNumber(row, ["expected_qty", "qty", "quantity"]),
+    expected_unit_price: readNumber(row, ["expected_unit_price", "unit_price"]),
+    potential_amount: readNumber(row, ["potential_amount", "amount"]),
+    probability_pct: readNumber(row, ["probability_pct", "probability"]),
     expected_close_date: readNullableString(row, ["expected_close_date", "close_date"]),
     dealer: readString(row, ["dealer", "dealer_name"]),
+    dealer_id: readNumber(row, ["dealer_id"]),
     rep: readString(row, ["rep", "rep_name"]),
+    rep_id: readNumber(row, ["rep_id"]),
+    status: readString(row, ["status"], "open"),
     ops_stock_confirmed: readBoolean(row, ["ops_stock_confirmed", "stock_confirmed", "is_confirmed"], false),
+    ops_confirmed_at: readNullableString(row, ["ops_confirmed_at", "confirmed_at"]),
+    notes: readNullableString(row, ["notes"]),
+    created_at: readString(row, ["created_at"]),
   };
 }
 
@@ -221,8 +234,6 @@ function mapSafeResult<TRow>(
 
 function buildDateParams(from: string, to: string) {
   return {
-    from,
-    to,
     from_date: from,
     to_date: to,
   };
@@ -333,11 +344,11 @@ export async function getCollectionByDealer(
   to: string,
 ): Promise<SafeResult<CollectionDealerRow[]>> {
   const safe = await tryServerSafe(
-    callRpc<RawRow>("sales_ops_collections_by_dealer", {
+    callRpc<RawRow>("sales_ops_collection_by_dealer", {
       p_collection: collection,
       ...buildDateParams(from, to),
     }),
-    "sales_ops_collections_by_dealer",
+    "sales_ops_collection_by_dealer",
     [],
   );
   return mapSafeResult(safe, mapCollectionDealerRow);

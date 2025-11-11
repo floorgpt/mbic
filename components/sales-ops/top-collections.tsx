@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { fmtPct0, fmtUSD0 } from "@/lib/format";
+import { fmtPct0, fmtUSD0, fmtUSDCompact } from "@/lib/format";
 import type { PanelMeta } from "@/lib/utils";
 import { fetchCollectionDealers } from "@/lib/salesops-client";
 import type { CollectionDealerRow } from "@/types/salesops";
@@ -140,24 +140,26 @@ export function TopCollections({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="space-y-2">
         {collections.length ? (
           collections.map((item) => (
             <button
               key={item.collection}
               type="button"
               onClick={() => handleOpen(item)}
-              className="group rounded-full border border-transparent bg-muted px-4 py-2 text-left transition hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
+              className="group flex w-full items-center justify-between rounded-lg border border-transparent bg-muted/40 px-4 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground group-hover:text-primary">
-                {item.collection}
-              </p>
-              <p className="font-montserrat text-lg font-semibold text-foreground group-hover:text-primary">
-                {fmtUSD0(item.revenue)}
-              </p>
-              <p className="text-xs text-muted-foreground">
+              <div className="flex flex-col">
+                <p className="text-sm font-semibold text-foreground group-hover:text-primary">
+                  {item.collection}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {fmtUSDCompact(item.revenue)} lifetime
+                </p>
+              </div>
+              <div className="rounded-full bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
                 {fmtPct0(item.sharePct)} share
-              </p>
+              </div>
             </button>
           ))
         ) : (

@@ -47,3 +47,20 @@ export async function tryServerSafe<T>(
   const count = Array.isArray(resolved) ? resolved.length : resolved ? 1 : 0;
   return { data: resolved as T, _meta: { ok: true, count } };
 }
+
+/**
+ * Parse collection and color from expected_sku
+ * Format: "collection:color" (e.g., "quick48+:Rustic Pine")
+ */
+export function parseProductFromSku(expectedSku?: string | null): {
+  collection: string;
+  color: string;
+} {
+  if (!expectedSku) {
+    return { collection: "TBD", color: "TBD" };
+  }
+  const [collectionRaw, colorRaw] = expectedSku.split(":");
+  const collection = collectionRaw?.trim() || "TBD";
+  const color = colorRaw?.trim() || "TBD";
+  return { collection, color };
+}

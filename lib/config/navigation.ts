@@ -5,6 +5,7 @@ import {
   LineChart,
   LogOut,
   MessageCircle,
+  Package,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -24,6 +25,11 @@ export const DASHBOARD_NAV = [
     label: "Sales Operations",
     href: "/sales-ops",
     icon: Boxes,
+  },
+  {
+    label: "Operations Hub",
+    href: "/ops",
+    icon: Package,
   },
   {
     label: "Marketing",

@@ -176,7 +176,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         </Card>
       </section>
 
-      <section>
+      <section id="dealer-performance">
         <Card className="border-none bg-background">
           <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>

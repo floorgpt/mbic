@@ -55,21 +55,34 @@ export type CollectionMonthlyRow = CollectionLeaderboardRow & {
 
 export type CollectionDealerRow = {
   dealer: string;
+  dealer_id: number;
   revenue: number;
   avg_price: number;
   avg_cogs: number;
   gross_margin: number;
   gross_profit: number;
+  preferred_color: string;
+  buying_power_pct: number;
 };
 
 export type FutureOpportunityRow = {
+  id: number;
   project_name: string;
   expected_sku: string;
   expected_qty: number;
+  expected_unit_price: number;
+  potential_amount: number;
+  probability_pct: number;
   expected_close_date: string | null;
   dealer: string;
+  dealer_id: number;
   rep: string;
-  ops_stock_confirmed: boolean | null;
+  rep_id: number;
+  status: string;
+  ops_stock_confirmed: boolean;
+  ops_confirmed_at: string | null;
+  notes: string | null;
+  created_at: string;
 };
 
 export type IncomingStockRow = {

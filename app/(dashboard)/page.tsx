@@ -9,6 +9,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TopCollections } from "@/components/sales-ops/top-collections-enhanced";
 import {
   Table,
   TableBody,
@@ -182,37 +183,6 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
   );
 }
 
-function TopCollectionsList({ collections }: { collections: TopCollectionRow[] }) {
-  if (!collections.length) {
-    return <DataPlaceholder message="Data available soon." />;
-  }
-
-  return (
-    <div className="space-y-3">
-      {collections.map((item, index) => (
-        <div
-          key={`${item.collection_key}-${index}`}
-          className="rounded-xl border border-black/5 bg-card/90 px-4 py-3 shadow-sm"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate font-medium tracking-tight">{item.collection_name}</p>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {fmtUSD0(item.lifetime_sales)} lifetime
-              </p>
-            </div>
-            <Badge
-              variant="secondary"
-              className="rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wide"
-            >
-              {fmtPct0(item.share_pct)} share
-            </Badge>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function toPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -226,6 +196,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const params = await (searchParams ?? Promise.resolve({} as DashboardSearchParams));
   const from = normalizeParam(params.from) || DEFAULT_FROM;
   const to = normalizeParam(params.to) || DEFAULT_TO;
+  const collectionsPage = parseInt(normalizeParam(params.collectionsPage) ?? "1", 10);
 
   const envIssues: string[] = [];
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -334,19 +305,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const sortedCollections = [...collectionsState.data].sort(
     (a, b) => (b.lifetime_sales ?? 0) - (a.lifetime_sales ?? 0),
   );
-  const totalCollectionsPages = Math.max(
-    1,
-    Math.ceil(sortedCollections.length / TOP_COLLECTIONS_PAGE_SIZE),
+
+  // Transform collections data for enhanced TopCollections component
+  const collectionsTotalRevenue = sortedCollections.reduce(
+    (acc, row) => acc + (row.lifetime_sales ?? 0),
+    0,
   );
-  const collectionsPageParam = parseInt(normalizeParam(params.collectionsPage) ?? "1", 10);
-  const currentCollectionsPage = Number.isNaN(collectionsPageParam)
-    ? 1
-    : Math.min(Math.max(collectionsPageParam, 1), totalCollectionsPages);
-  const collectionsStart = (currentCollectionsPage - 1) * TOP_COLLECTIONS_PAGE_SIZE;
-  const pagedCollections = sortedCollections.slice(
-    collectionsStart,
-    collectionsStart + TOP_COLLECTIONS_PAGE_SIZE,
-  );
+  const allCollectionsData = sortedCollections.map((row) => ({
+    collection: row.collection_name,
+    revenue: row.lifetime_sales ?? 0,
+    sharePct:
+      collectionsTotalRevenue > 0
+        ? ((row.lifetime_sales ?? 0) / collectionsTotalRevenue) * 100
+        : 0,
+  }));
+
+  // Paginate collections (5 per page)
+  const totalCollectionsPages = Math.ceil(allCollectionsData.length / TOP_COLLECTIONS_PAGE_SIZE);
+  const safeCollectionsPage = Math.max(1, Math.min(collectionsPage, totalCollectionsPages || 1));
+  const startIdx = (safeCollectionsPage - 1) * TOP_COLLECTIONS_PAGE_SIZE;
+  const topCollectionsData = allCollectionsData.slice(startIdx, startIdx + TOP_COLLECTIONS_PAGE_SIZE);
   const ytdTotal = monthlyState.data.reduce((sum, row) => sum + (row.total ?? 0), 0);
 
   const grossRevenueSubtitle = `— • No Year-over-Year delta • data available from ${from} to ${to}`;
@@ -434,42 +412,49 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <div className="flex items-start justify-between gap-2">
               <div>
                 <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Top Collections</CardTitle>
-                <p className="text-sm text-muted-foreground">All-time sales performance by collection.</p>
+                <p className="text-sm text-muted-foreground">Click a collection to drill into dealer performance.</p>
               </div>
               <PanelFailureBadge meta={collectionsState.meta} />
             </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-            <TopCollectionsList collections={pagedCollections} />
-            {totalCollectionsPages > 1 ? (
-              <div className="mt-auto flex items-center justify-end gap-2 text-xs text-muted-foreground">
-                <Link
-                  href={buildPaginationHref(params, "collectionsPage", Math.max(1, currentCollectionsPage - 1))}
-                  className={cn(
-                    "rounded-full border border-black/10 px-3 py-1 transition hover:bg-muted",
-                    currentCollectionsPage === 1 && "pointer-events-none opacity-40",
-                  )}
-                  aria-disabled={currentCollectionsPage === 1}
-                  data-disabled={currentCollectionsPage === 1}
-                >
-                  Previous
-                </Link>
-                <span>
-                  Page {currentCollectionsPage} / {totalCollectionsPages}
+            <TopCollections
+              collections={topCollectionsData}
+              from={from}
+              to={to}
+              meta={collectionsState.meta}
+            />
+            {totalCollectionsPages > 1 && (
+              <div className="flex items-center justify-center gap-2 border-t pt-4 text-xs text-muted-foreground">
+                {safeCollectionsPage > 1 ? (
+                  <Link
+                    href={buildPaginationHref(params, "collectionsPage", safeCollectionsPage - 1)}
+                    className="rounded-md border border-muted bg-background px-3 py-1.5 transition hover:bg-muted/60"
+                  >
+                    ← Previous
+                  </Link>
+                ) : (
+                  <span className="rounded-md border border-transparent bg-muted/40 px-3 py-1.5 text-muted-foreground/50">
+                    ← Previous
+                  </span>
+                )}
+                <span className="px-2 font-medium">
+                  Page {safeCollectionsPage} of {totalCollectionsPages}
                 </span>
-                <Link
-                  href={buildPaginationHref(params, "collectionsPage", Math.min(totalCollectionsPages, currentCollectionsPage + 1))}
-                  className={cn(
-                    "rounded-full border border-black/10 px-3 py-1 transition hover:bg-muted",
-                    currentCollectionsPage >= totalCollectionsPages && "pointer-events-none opacity-40",
-                  )}
-                  aria-disabled={currentCollectionsPage >= totalCollectionsPages}
-                  data-disabled={currentCollectionsPage >= totalCollectionsPages}
-                >
-                  Next
-                </Link>
+                {safeCollectionsPage < totalCollectionsPages ? (
+                  <Link
+                    href={buildPaginationHref(params, "collectionsPage", safeCollectionsPage + 1)}
+                    className="rounded-md border border-muted bg-background px-3 py-1.5 transition hover:bg-muted/60"
+                  >
+                    Next →
+                  </Link>
+                ) : (
+                  <span className="rounded-md border border-transparent bg-muted/40 px-3 py-1.5 text-muted-foreground/50">
+                    Next →
+                  </span>
+                )}
               </div>
-            ) : null}
+            )}
           </CardContent>
         </Card>
       </section>

@@ -2,6 +2,8 @@
 
 Marketing & BI Center (MBIC) for CPF Floors built with Next.js 15, TypeScript, shadcn/ui, Tailwind CSS, Recharts, and Supabase.
 
+> **📋 Latest Changes**: See [CHANGELOG-2025-01.md](CHANGELOG-2025-01.md) for recent updates (January 2025)
+
 ## Requirements
 
 - Node.js 18+
@@ -45,6 +47,19 @@ npm run lint
 npm run type-check
 npm run build
 ```
+
+## Documentation
+
+### Quick Links
+- **[CHANGELOG-2025-01.md](CHANGELOG-2025-01.md)** - Recent updates and bug fixes (January 2025)
+- **[DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md)** - Step-by-step deployment instructions
+- **[FEATURES-GUIDE.md](FEATURES-GUIDE.md)** - User guide for new features
+- **[SALES-OPS-MIGRATION-README.md](SALES-OPS-MIGRATION-README.md)** - Sales Ops setup guide
+
+### Technical Documentation
+- **[docs/mbic-supabase-integration.md](docs/mbic-supabase-integration.md)** - Data integration details
+- **[docs/sales-ops-migration-guide.md](docs/sales-ops-migration-guide.md)** - Detailed migration steps
+- **[docs/supabase-postgrest-limit-issue.md](docs/supabase-postgrest-limit-issue.md)** - PostgREST limitations
 
 ## Development Notes
 

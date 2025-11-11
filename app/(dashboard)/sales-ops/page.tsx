@@ -1,24 +1,19 @@
 import { unstable_noStore as noStore } from "next/cache";
 import type { Metadata } from "next";
-import { ArrowUpRight, Boxes, Percent, TrendingUp } from "lucide-react";
+import { ArrowUpRight, Boxes, ExternalLink, Percent, TrendingUp } from "lucide-react";
+import Link from "next/link";
 
 import { SalesOpsRangePicker } from "@/components/sales-ops/range-picker";
 import { EconomicsChart } from "@/components/sales-ops/economics-chart";
-import { TopCollections } from "@/components/sales-ops/top-collections";
+import { TopCollections } from "@/components/sales-ops/top-collections-enhanced";
 import { ReportsTimeline } from "@/components/sales-ops/reports-timeline";
+import { FutureOppsCard } from "@/components/sales-ops/future-opps-card";
+import { IncomingStockCard } from "@/components/sales-ops/incoming-stock-card";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { fmtCompact, fmtPct0, fmtUSD0 } from "@/lib/format";
+import { fmtPct0, fmtUSDCompact } from "@/lib/format";
 import {
   getCategoryKpis,
   getCategoryKpisMonthly,
@@ -106,6 +101,29 @@ function startOfQuarter(date: Date): Date {
 
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function formatDateRange(from: string, to: string, presetId: RangePresetId): string {
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  const year = toDate.getFullYear();
+
+  const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+  const fromMonth = monthFormatter.format(fromDate);
+  const toMonth = monthFormatter.format(toDate);
+
+  if (presetId === "ytd") {
+    return `YTD from ${fromMonth} to ${toMonth}, ${year}`;
+  }
+  if (presetId === "qtd") {
+    const quarter = Math.floor(fromDate.getMonth() / 3) + 1;
+    return `Q${quarter} ${year} from ${fromMonth} to ${toMonth}`;
+  }
+  if (presetId === "mtd") {
+    return `MTD ${toMonth} ${year}`;
+  }
+  // Custom range
+  return `${fromMonth} ${fromDate.getDate()} – ${toMonth} ${toDate.getDate()}, ${year}`;
 }
 
 function normalizeParam(value: string | string[] | undefined): string | undefined {
@@ -449,7 +467,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
       <PageHeader
         kicker="Sales Ops"
         title="Sales & Operations Performance"
-        description="Measure Sales+Ops alignment with real-time KPIs and actionable stock signals."
+        description={`Measure Sales+Ops alignment with real-time KPIs and actionable stock signals. ${formatDateRange(from, to, activePreset)}.`}
         actions={
           <SalesOpsRangePicker
             presets={presets}
@@ -463,7 +481,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 md:gap-6">
         <KpiCard
           title="Gross Revenue"
-          value={fmtUSD0(totalRevenue)}
+          value={fmtUSDCompact(totalRevenue)}
           subtitle="YTD"
           icon={TrendingUp}
           statusBadge={<PanelFailureBadge meta={categoryKpisState.meta} />}
@@ -604,51 +622,24 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
               <PanelFailureBadge meta={futureOppsState.meta} />
             </div>
             <p className="text-sm text-muted-foreground">
-              Projects with pending stock confirmation. Coordinate with Ops to reserve inventory.
+              Aggregated view of pending opportunities. Click &quot;View All&quot; to manage in Operations Hub.
             </p>
           </CardHeader>
           <CardContent className="space-y-4 p-4 sm:p-6">
             {futureOppsState.meta.ok ? (
               futureOpps.length ? (
-                <div className="rounded-xl border border-muted/60">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-background">
-                      <TableRow>
-                        <TableHead>Project</TableHead>
-                        <TableHead>Dealer</TableHead>
-                        <TableHead>Expected SKU</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead className="text-right">Close Date</TableHead>
-                        <TableHead className="text-right">Rep</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {futureOpps.map((row) => (
-                        <TableRow key={`${row.project_name}-${row.expected_sku}-${row.dealer}`}>
-                          <TableCell className="font-medium">{row.project_name}</TableCell>
-                          <TableCell>{row.dealer}</TableCell>
-                          <TableCell>{row.expected_sku}</TableCell>
-                          <TableCell className="text-right tabular-nums">{fmtCompact(row.expected_qty)}</TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {row.expected_close_date ?? "TBD"}
-                          </TableCell>
-                          <TableCell className="text-right">{row.rep}</TableCell>
-                          <TableCell className="text-right">
-                            <button
-                              type="button"
-                              className="cursor-not-allowed rounded-full border border-dashed border-muted px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                              disabled
-                              title="Ops workflow coming"
-                            >
-                              Check stock
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <>
+                  <FutureOppsCard opportunities={futureOpps} />
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <Link
+                      href="/ops"
+                      className="inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+                    >
+                      View All in Operations Hub
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </>
               ) : (
                 <div className="rounded-xl border border-dashed border-muted bg-muted/40 p-6 text-sm text-muted-foreground">
                   No future opportunities without stock confirmation for this range.
@@ -674,46 +665,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
           </CardHeader>
           <CardContent className="space-y-4 p-4 sm:p-6">
             {incomingStockState.meta.ok ? (
-              incomingStock.length ? (
-                <div className="rounded-xl border border-muted/60">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-background">
-                      <TableRow>
-                        <TableHead>Collection</TableHead>
-                        <TableHead>SKU</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead className="text-right">ETA Date</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {incomingStock.map((row, index) => (
-                        <TableRow key={`${row.collection}-${row.sku}-${index}`}>
-                          <TableCell className="font-medium">{row.collection}</TableCell>
-                          <TableCell>{row.sku}</TableCell>
-                          <TableCell className="text-right tabular-nums">{fmtCompact(row.qty)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{row.eta_date ?? "TBD"}</TableCell>
-                          <TableCell className="text-right">
-                            {row.received_at ? (
-                              <Badge className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-600">
-                                Arrived
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide">
-                                Inbound
-                              </Badge>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-muted bg-muted/40 p-6 text-sm text-muted-foreground">
-                  No inbound purchase orders for this range.
-                </div>
-              )
+              <IncomingStockCard incomingStock={incomingStock} />
             ) : (
               <ThinkingPlaceholder />
             )}
