@@ -6,6 +6,7 @@ import type { ZipSalesRow, DealerByZipRow } from "@/lib/mbic-supabase";
 import { fmtUSD0 } from "@/lib/format";
 import { ArrowRight } from "lucide-react";
 import dynamic from "next/dynamic";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 import {
   Sheet,
   SheetContent,
@@ -34,20 +35,11 @@ type FloridaZipSalesMapProps = {
   dateRange: { from: string; to: string };
 };
 
-type GeoJSONFeature = {
-  type: string;
+type GeoJSONFeature = Feature<Geometry, Record<string, unknown>> & {
   id: string;
-  properties: Record<string, unknown>;
-  geometry: {
-    type: string;
-    coordinates: number[][][];
-  };
 };
 
-type GeoJSONData = {
-  type: string;
-  features: GeoJSONFeature[];
-};
+type GeoJSONData = FeatureCollection<Geometry, Record<string, unknown>>;
 
 export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps) {
   const router = useRouter();
@@ -161,8 +153,8 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
   };
 
   // Style function for each ZIP feature
-  const style = (feature: GeoJSONFeature | undefined) => {
-    if (!feature) {
+  const style = (feature?: Feature<Geometry>) => {
+    if (!feature || !feature.id) {
       return {
         fillColor: "#e5e7eb",
         weight: 0.5,
@@ -172,7 +164,7 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
       };
     }
 
-    const zipCode = feature.id as string;
+    const zipCode = String(feature.id);
     const zipData = revenueByZip.get(zipCode);
     const revenue = zipData?.revenue ?? 0;
 
@@ -186,8 +178,8 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
   };
 
   // Tooltip on hover with eye icon
-  const onEachFeature = (feature: GeoJSONFeature, layer: L.Layer) => {
-    const zipCode = feature.id as string;
+  const onEachFeature = (feature: Feature<Geometry>, layer: L.Layer) => {
+    const zipCode = String(feature.id ?? "");
     const zipData = revenueByZip.get(zipCode);
 
     if (zipData) {
