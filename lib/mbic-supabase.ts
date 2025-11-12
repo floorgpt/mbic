@@ -532,3 +532,81 @@ export async function getDealerEngagementSafe(
     _meta: { ...safe._meta, count: mapped.length },
   };
 }
+
+export type ZipSalesRow = {
+  zip_code: string;
+  revenue: number;
+  dealer_count: number;
+  order_count: number;
+};
+
+export type DealerByZipRow = {
+  customer_id: number;
+  dealer_name: string;
+  rep_id: number | null;
+  rep_name: string;
+  total_sales: number;
+  order_count: number;
+  cities: string | null;
+};
+
+export async function getFloridaZipSalesSafe(
+  from: DateISO,
+  to: DateISO,
+  category?: string | null,
+  collection?: string | null,
+): Promise<SafeResult<ZipSalesRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("sales_by_zip_fl", {
+      from_date: from,
+      to_date: to,
+      p_category: category ?? null,
+      p_collection: collection ?? null,
+    }),
+    "sales_by_zip_fl",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => ({
+    zip_code: typeof row.zip_code === "string" ? row.zip_code : "",
+    revenue: asNumber(row.revenue, 0),
+    dealer_count: asNumber(row.dealer_count, 0),
+    order_count: asNumber(row.order_count, 0),
+  }));
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}
+
+export async function getDealersByZipSafe(
+  zipCode: string,
+  from: DateISO,
+  to: DateISO,
+): Promise<SafeResult<DealerByZipRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("dealers_by_zip", {
+      p_zip_code: zipCode,
+      from_date: from,
+      to_date: to,
+    }),
+    "dealers_by_zip",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => ({
+    customer_id: asNumber(row.customer_id, 0),
+    dealer_name: typeof row.dealer_name === "string" ? row.dealer_name : "",
+    rep_id: row.rep_id === null ? null : asNumber(row.rep_id, 0),
+    rep_name: typeof row.rep_name === "string" ? row.rep_name : "Unassigned",
+    total_sales: asNumber(row.total_sales, 0),
+    order_count: asNumber(row.order_count, 0),
+    cities: typeof row.cities === "string" ? row.cities : null,
+  }));
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}

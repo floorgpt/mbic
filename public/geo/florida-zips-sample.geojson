@@ -1,0 +1,101 @@
+{
+  "type": "FeatureCollection",
+  "comment": "SAMPLE Florida ZIP GeoJSON - Replace with full ZCTA5 data from US Census TIGER/Line",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "33166",
+      "properties": {
+        "ZCTA5CE10": "33166",
+        "name": "Miami",
+        "state": "FL"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-80.3080, 25.8480],
+          [-80.2980, 25.8480],
+          [-80.2980, 25.8380],
+          [-80.3080, 25.8380],
+          [-80.3080, 25.8480]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "33156",
+      "properties": {
+        "ZCTA5CE10": "33156",
+        "name": "Miami",
+        "state": "FL"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-80.4080, 25.7480],
+          [-80.3980, 25.7480],
+          [-80.3980, 25.7380],
+          [-80.4080, 25.7380],
+          [-80.4080, 25.7480]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "32801",
+      "properties": {
+        "ZCTA5CE10": "32801",
+        "name": "Orlando",
+        "state": "FL"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-81.3780, 28.5480],
+          [-81.3680, 28.5480],
+          [-81.3680, 28.5380],
+          [-81.3780, 28.5380],
+          [-81.3780, 28.5480]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "33304",
+      "properties": {
+        "ZCTA5CE10": "33304",
+        "name": "Fort Lauderdale",
+        "state": "FL"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-80.1380, 26.1280],
+          [-80.1280, 26.1280],
+          [-80.1280, 26.1180],
+          [-80.1380, 26.1180],
+          [-80.1380, 26.1280]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "33602",
+      "properties": {
+        "ZCTA5CE10": "33602",
+        "name": "Tampa",
+        "state": "FL"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-82.4580, 27.9480],
+          [-82.4480, 27.9480],
+          [-82.4480, 27.9380],
+          [-82.4580, 27.9380],
+          [-82.4580, 27.9480]
+        ]]
+      }
+    }
+  ]
+}

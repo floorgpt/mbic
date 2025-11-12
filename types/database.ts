@@ -20,6 +20,11 @@ export type CustomersDemoRow = {
   customer_id: number;
   dealer_name: string;
   rep_id: number | null;
+  dealer_billing_address_city: string | null;
+  dealer_billing_address_state: string | null;
+  dealer_billing_address_postal_code: string | null;
+  dealer_billing_address_postal_country: string | null;
+  dealer_email_1: string | null;
 };
 
 export type SalesRepRow = {

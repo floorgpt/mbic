@@ -4,6 +4,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { ArrowUpRight, TrendingUp, Users } from "lucide-react";
 
 import { DealerHeatmap } from "@/components/dashboard/dealer-heatmap";
+import { FloridaZipSalesMap } from "@/components/dashboard/florida-zip-sales-map";
 import { MonthlyRevenueTrend } from "@/components/dashboard/monthly-revenue-trend";
 import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
@@ -22,6 +23,7 @@ import {
   getCategoryTotalsSafe,
   getDealerEngagementSafe,
   getFillRateSafe,
+  getFloridaZipSalesSafe,
   getOrgGrossProfitSafe,
   getOrgKpisSafe,
   getOrgMonthlySafe,
@@ -37,6 +39,7 @@ import {
   type RepRow,
   type OrgKpis,
   type MonthlyPoint,
+  type ZipSalesRow,
 } from "@/lib/mbic-supabase";
 import { fmtPct0, fmtUSD0, fmtUSDCompact } from "@/lib/format";
 import { formatNumber } from "@/lib/utils/format";
@@ -157,11 +160,11 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex h-full max-h-[600px] flex-col gap-3 overflow-y-auto pb-2 pr-2 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-2">
       {visible.map((category) => (
         <div
           key={category.category_key}
-          className="flex min-w-[200px] items-center gap-3 rounded-2xl border border-black/5 bg-card px-4 py-3 shadow-sm"
+          className="flex items-center gap-3 rounded-2xl border border-black/5 bg-card px-4 py-3 shadow-sm"
         >
           <Image
             src={getIcon(category.icon_url ?? undefined)}
@@ -169,9 +172,9 @@ function CategoryCarousel({ categories }: { categories: CategoryRow[] }) {
             width={32}
             height={32}
             sizes="(max-width: 640px) 32px, (max-width: 1024px) 32px, 32px"
-            className="h-8 w-8 rounded-lg ring-1 ring-black/5"
+            className="h-8 w-8 flex-shrink-0 rounded-lg ring-1 ring-black/5"
           />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate font-medium tracking-tight">{category.display_name}</p>
             <p className="text-xs text-muted-foreground tabular-nums">
               {fmtUSD0(category.total_sales)} • {fmtPct0(category.share_pct)}
@@ -220,6 +223,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   let categoriesState: PanelState<CategoryRow[]>;
   let collectionsState: PanelState<TopCollectionRow[]>;
   let engagementState: PanelState<DealerEngagementRow[]>;
+  let zipSalesState: PanelState<ZipSalesRow[]>;
 
   if (envReady) {
     const panelPromises = [
@@ -232,6 +236,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       getCategoryTotalsSafe(from, to),
       getTopCollectionsSafe(from, to),
       getDealerEngagementSafe(from, to),
+      getFloridaZipSalesSafe(from, to),
     ] as const;
 
     const [
@@ -244,6 +249,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       categoriesRes,
       collectionsRes,
       engagementRes,
+      zipSalesRes,
     ] = await Promise.allSettled(panelPromises);
 
     kpisState = resolvePanelResult(kpisRes, DEFAULT_KPIS, "sales_org_kpis_v2");
@@ -259,6 +265,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       [],
       "sales_org_dealer_engagement_trailing_v3",
     );
+    zipSalesState = resolvePanelResult(zipSalesRes, [], "sales_by_zip_fl");
   } else {
     const meta = createPanelErrorMeta(envWarningMessage ?? "Supabase credentials missing");
     kpisState = { data: DEFAULT_KPIS, meta };
@@ -270,6 +277,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     categoriesState = { data: [], meta };
     collectionsState = { data: [], meta };
     engagementState = { data: [], meta };
+    zipSalesState = { data: [], meta };
   }
 
   console.log("[dash-panels]", {
@@ -284,6 +292,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     cats: categoriesState.meta,
     collections: collectionsState.meta,
     engage: engagementState.meta,
+    zipSales: zipSalesState.meta,
+  });
+
+  console.log("[dash-zip-debug]", {
+    zipDataLength: zipSalesState.data.length,
+    sampleZips: zipSalesState.data.slice(0, 3),
   });
 
   const totalRevenue = kpisState.data.revenue ?? 0;
@@ -467,23 +481,36 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </Card>
       </section>
 
-      <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
-        <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-          <div>
-            <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Category Engagement</CardTitle>
-            <p className="text-sm text-muted-foreground">Every active segment this period.</p>
-          </div>
-          <PanelFailureBadge meta={categoriesState.meta} />
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6">
-          <CategoryCarousel categories={sortedCategories} />
-          {sortedCategories.length > 3 ? (
-            <p className="mt-2 text-right text-[11px] uppercase tracking-wide text-muted-foreground/70">
-              Scroll →
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm xl:col-span-2">
+          <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div>
+              <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Florida Sales by ZIP Code</CardTitle>
+              <p className="text-sm text-muted-foreground">Year-to-date revenue distribution across Florida ZIP codes.</p>
+            </div>
+            <PanelFailureBadge meta={zipSalesState.meta} />
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6">
+            <FloridaZipSalesMap
+              data={zipSalesState.data}
+              dateRange={{ from, to }}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+          <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div>
+              <CardTitle className="mb-1 text-2xl font-semibold tracking-tight">Category Engagement</CardTitle>
+              <p className="text-sm text-muted-foreground">Every active segment this period.</p>
+            </div>
+            <PanelFailureBadge meta={categoriesState.meta} />
+          </CardHeader>
+          <CardContent className="flex h-full flex-1 flex-col p-4 sm:p-6">
+            <CategoryCarousel categories={sortedCategories} />
+          </CardContent>
+        </Card>
+      </section>
 
       <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
         <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">

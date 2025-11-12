@@ -88,6 +88,8 @@ The following RPCs are executed for every dashboard render (and the `/api/diag` 
 | `sales_org_top_reps` | `from_date`, `to_date`, `limit`, `offset` | Rep leaderboard with revenue and activity stats. | Numeric guardrails ensure missing values print as `—`. |
 | `sales_category_totals` | `from_date`, `to_date` | Category totals with Cloudinary icon URLs. | UI filters out `__UNMAPPED__` and replaces missing icons via `getIcon`. |
 | `sales_org_dealer_engagement_trailing_v3` | `from_date`, `to_date` | Monthly assigned vs. active dealers. | Sorted chronologically in the component before rendering. |
+| `sales_by_zip_fl` | `from_date`, `to_date`, `p_category`, `p_collection` | ZIP code aggregations for Florida. | Returns `[{ zip_code, revenue, dealer_count, order_count }]` with optional category/collection filters. |
+| `dealers_by_zip` | `p_zip_code`, `from_date`, `to_date` | Dealer drill-down for specific ZIP. | Returns dealers in ZIP with sales metrics, rep assignments, and city names for map drawer. |
 
 All helpers return a `SafeResult<T>` object:
 
@@ -108,7 +110,27 @@ type SafeResult<T> = { data: T; _meta: PanelMeta };
    - Results are normalised via `resolvePanelResult`, ensuring `PanelState<T>` always contains `{ data, meta }`.
    - A single `[dash-panels]` log emits `{ ok, count, err? }` for every panel per SSR render (used for Netlify observability).
 4. When env vars are missing, the helper layer is skipped entirely. A banner renders and `_meta.ok` is forced to `false` so every panel stays in sync.
-5. The UI reads `state.meta.ok` to decide whether to show the “Panel failed” badge while still displaying placeholders so the page stays responsive even when some RPCs fail.
+5. The UI reads `state.meta.ok` to decide whether to show the "Panel failed" badge while still displaying placeholders so the page stays responsive even when some RPCs fail.
+
+#### Florida ZIP Code Sales Map
+
+The dashboard includes an interactive Leaflet-based choropleth map showing sales distribution across Florida ZIP codes:
+
+- **Visualization**: Green color gradient (light → dark) indicates sales intensity by ZIP code
+- **Interactivity**:
+  - Zoom/pan controls for exploring the state
+  - Click any ZIP to view popup with revenue, dealer count, and order count
+  - "View" button opens side drawer with detailed drill-down
+- **Drill-down drawer**:
+  - Shows cities within the ZIP code
+  - Lists all dealers with sales volume, order count, and assigned rep (with initials)
+  - Arrow button navigates to Sales page with dealer and rep pre-selected
+- **Data source**:
+  - Map visualization: `sales_by_zip_fl` RPC (983 Florida ZIP codes)
+  - Dealer details: `dealers_by_zip` RPC with city aggregation
+  - GeoJSON boundaries: US Census TIGER/Line 2010 ZCTA5 data (678KB, optimized with mapshaper)
+- **Component**: `components/dashboard/florida-zip-sales-map.tsx`
+- **API route**: `/api/dealers-by-zip` (fetches dealer list for selected ZIP)
 
 You can reproduce the data snapshot locally with:
 
@@ -281,6 +303,8 @@ Every push to `main` will trigger a Netlify deploy.
 |  | `sales_ops_collections_by_dealer` | `p_collection`, `from`, `to` | Dealer drilldown API `/api/collection-by-dealer`. |
 |  | `list_future_sale_opps_open` | `from`, `to` | Future opportunity table. |
 |  | `list_incoming_stock_by_collection` | `from`, `to` | Incoming stock table. |
+| Geographic Sales Analysis (`lib/mbic-supabase.ts`) | `sales_by_zip_fl` | `from_date`, `to_date`, `p_category`, `p_collection` | Aggregates sales by Florida ZIP code for choropleth map. |
+|  | `dealers_by_zip` | `p_zip_code`, `from_date`, `to_date` | Dealer-level drill-down for specific ZIP with city names and rep assignments. |
 | Forms & Catalog (`lib/forms/catalog.ts`) | `get_colors_by_collection_v2` | `p_collection` | Color catalog for `/forms` (also exposed via `/api/forms/catalog/colors`). |
 |  | Tables: `sales_reps_demo`, `customers_demo`, `product_categories`, `product_category_collection_map` | server selects | Populate dependent dropdowns (rep → dealer → category → collection) in public forms. |
 |  | `loss_opportunities` | insert/select | POST `/api/forms/loss-opportunity` stores submissions then triggers n8n webhook. |

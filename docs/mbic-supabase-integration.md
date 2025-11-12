@@ -26,16 +26,23 @@
 These changes bring the backend queries in line with Supabase’s authoritative totals when run locally with valid credentials.
 
 ## Data Flow Overview
-1. **Source of Truth**: Supabase schema  
-   - `sales_demo` provides invoice-level facts (amount, customer, rep, date, collection).  
+1. **Source of Truth**: Supabase schema
+   - `sales_demo` provides invoice-level facts (amount, customer, rep, date, collection).
    - `customers_demo` and `sales_reps_demo` enrich the fact table with names and assignments.
-2. **Backend Aggregation** (`lib/db/sales.ts`)  
-   - `fetchSalesRange` issues server-side admin queries with optional filters (rep, dealer, date range).  
+2. **Backend Aggregation** (`lib/db/sales.ts`)
+   - `fetchSalesRange` issues server-side admin queries with optional filters (rep, dealer, date range).
    - Helpers derive monthly totals, dealer aggregates, rep aggregates, and active-dealer counts before returning a structured `OrganizationSalesOverview`.
-3. **Frontend Consumption**  
-   - Dashboard (`app/(dashboard)/page.tsx`) calls `fetchOrganizationSalesOverview()` during server rendering, surfaces `grandTotal`, `monthlyTotals`, dealer/collection/rep aggregates, and KPIs.  
-   - Sales page (`app/(dashboard)/sales/page.tsx`) invokes `fetchRepSalesData(repId)` for the selected rep, rendering trends and dealer breakdown tables.  
+3. **Frontend Consumption**
+   - Dashboard (`app/(dashboard)/page.tsx`) calls `fetchOrganizationSalesOverview()` during server rendering, surfaces `grandTotal`, `monthlyTotals`, dealer/collection/rep aggregates, and KPIs.
+   - Sales page (`app/(dashboard)/sales/page.tsx`) invokes `fetchRepSalesData(repId)` for the selected rep, rendering trends and dealer breakdown tables.
    - Shared marketing/sales widgets rely on `lib/supabase/queries.ts`, which now streams complete tables via the admin client.
+4. **Geographic Sales Analysis**
+   - **Florida ZIP Code Map** (`components/dashboard/florida-zip-sales-map.tsx`) renders an interactive Leaflet choropleth showing sales distribution across 983 Florida ZIP codes.
+   - **RPC Functions**:
+     - `sales_by_zip_fl(from_date, to_date, p_category, p_collection)` aggregates revenue, dealer count, and order count by ZIP code with optional category/collection filters.
+     - `dealers_by_zip(p_zip_code, from_date, to_date)` returns dealer-level drill-down with sales metrics, rep assignments, and city names for drawer display.
+   - **GeoJSON**: US Census TIGER/Line 2010 ZCTA5 boundaries (678KB, optimized via mapshaper) provide ZIP code polygons.
+   - **API Route**: `/api/dealers-by-zip` fetches dealer details when user clicks a ZIP code on the map.
 
 ## Remaining Risks & Next Steps
 1. **Deployment Environment**
