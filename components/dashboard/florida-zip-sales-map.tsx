@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import type { ZipSalesRow, DealerByZipRow } from "@/lib/mbic-supabase";
 import { fmtUSD0 } from "@/lib/format";
-import { Eye, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import dynamic from "next/dynamic";
 import {
   Sheet,
@@ -186,7 +186,7 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
   };
 
   // Tooltip on hover with eye icon
-  const onEachFeature = (feature: GeoJSONFeature, layer: any) => {
+  const onEachFeature = (feature: GeoJSONFeature, layer: L.Layer) => {
     const zipCode = feature.id as string;
     const zipData = revenueByZip.get(zipCode);
 
@@ -264,9 +264,9 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
           <GeoJSON
-            data={geoData as any}
-            style={style as any}
-            onEachFeature={onEachFeature as any}
+            data={geoData}
+            style={style}
+            onEachFeature={onEachFeature}
           />
         </MapContainer>
 
