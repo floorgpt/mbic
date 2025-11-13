@@ -212,6 +212,7 @@ function mapFutureOpportunityRow(row: RawRow): FutureOpportunityRow {
 function mapLossOpportunityRow(row: RawRow): LossOpportunityRow {
   return {
     id: readNumber(row, ["id"]),
+    record_id: readNullableString(row, ["record_id"]),
     dealer: readString(row, ["dealer", "dealer_name"]),
     dealer_id: readNumber(row, ["dealer_id"]),
     rep: readString(row, ["rep", "rep_name"]),
@@ -225,6 +226,7 @@ function mapLossOpportunityRow(row: RawRow): LossOpportunityRow {
     potential_amount: readNumber(row, ["potential_amount", "amount"]),
     reason: readString(row, ["reason"]),
     notes: readNullableString(row, ["notes"]),
+    attachment_url: readNullableString(row, ["attachment_url"]),
     created_at: readString(row, ["created_at"]),
   };
 }

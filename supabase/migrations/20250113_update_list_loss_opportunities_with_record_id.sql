@@ -1,7 +1,5 @@
--- RPC Function: list_loss_opportunities
--- Returns loss opportunities submitted by sales reps
--- Used for Sales Ops dashboard to track lost sales
--- Date: 2025-01-12
+-- Migration: Update list_loss_opportunities RPC to include record_id
+-- Adds the record_id UUID field to the RPC function return type
 
 DROP FUNCTION IF EXISTS public.list_loss_opportunities(date, date) CASCADE;
 
@@ -11,6 +9,7 @@ CREATE FUNCTION public.list_loss_opportunities(
 )
 RETURNS TABLE (
   id INTEGER,
+  record_id UUID,
   dealer TEXT,
   dealer_id INTEGER,
   rep TEXT,
@@ -33,6 +32,7 @@ SECURITY DEFINER
 AS $$
   SELECT
     lo.id,
+    lo.record_id,
     COALESCE(c.dealer_name, 'Unknown') AS dealer,
     lo.dealer_id,
     COALESCE(r.rep_name, 'Unknown') AS rep,
@@ -61,4 +61,4 @@ $$;
 GRANT EXECUTE ON FUNCTION public.list_loss_opportunities(date, date) TO authenticated, anon, service_role;
 
 -- Add comment
-COMMENT ON FUNCTION public.list_loss_opportunities IS 'Lists loss opportunities submitted by sales reps within a date range. Includes dealer and rep information via LEFT JOIN.';
+COMMENT ON FUNCTION public.list_loss_opportunities IS 'Lists loss opportunities submitted by sales reps within a date range. Includes dealer and rep information via LEFT JOIN. Returns record_id UUID for tracking.';

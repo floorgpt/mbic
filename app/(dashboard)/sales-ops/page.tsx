@@ -1,3 +1,4 @@
+import * as React from "react";
 import { unstable_noStore as noStore } from "next/cache";
 import type { Metadata } from "next";
 import { ArrowUpRight, Boxes, ExternalLink, Percent, TrendingUp } from "lucide-react";
@@ -10,10 +11,13 @@ import { ReportsTimeline } from "@/components/sales-ops/reports-timeline";
 import { FutureOppsCard } from "@/components/sales-ops/future-opps-card";
 import { IncomingStockCard } from "@/components/sales-ops/incoming-stock-card";
 import { LossOppsCard } from "@/components/sales-ops/loss-opps-card";
+import { LossOpportunitiesSection } from "@/components/sales-ops/loss-opportunities-section";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { fmtPct0, fmtUSDCompact } from "@/lib/format";
 import {
   getCategoryKpis,
@@ -688,34 +692,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
         </Card>
       </section>
 
-      <section className="grid grid-cols-1">
-        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
-          <CardHeader className="flex flex-col gap-2 p-4 pb-0 sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-2xl font-semibold tracking-tight">
-                Loss Opportunities
-              </CardTitle>
-              <PanelFailureBadge meta={lossOppsState.meta} />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Track lost sales opportunities to identify patterns and improve future conversions. Toggle to show/hide details.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4 p-4 sm:p-6">
-            {lossOppsState.meta.ok ? (
-              lossOpps.length ? (
-                <LossOppsCard opportunities={lossOpps} />
-              ) : (
-                <div className="rounded-xl border border-dashed border-muted bg-muted/40 p-6 text-sm text-muted-foreground">
-                  No loss opportunities recorded for this range.
-                </div>
-              )
-            ) : (
-              <ThinkingPlaceholder />
-            )}
-          </CardContent>
-        </Card>
-      </section>
+      <LossOpportunitiesSection lossOpps={lossOpps} lossOppsState={lossOppsState} />
     </div>
   );
 }

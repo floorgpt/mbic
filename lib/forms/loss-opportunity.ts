@@ -144,6 +144,7 @@ export async function insertLossOpportunity(
         collection: payload.collectionKey ?? null,
         color: payload.colorName ?? null,
         expected_sku: payload.expectedSku ?? null,
+        attachment_url: (payload as any).attachmentUrl ?? null,
       };
 
       const { data, error } = await supabase

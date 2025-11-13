@@ -59,6 +59,7 @@ type FormValues = {
   requestedQty: string;
   targetPrice: string;
   notes: string;
+  attachmentFile: File | null;
 };
 
 type FormErrors = Partial<Record<keyof FormValues, string>>;
@@ -92,6 +93,7 @@ const DEFAULT_VALUES: FormValues = {
   requestedQty: "",
   targetPrice: "",
   notes: "",
+  attachmentFile: null,
 };
 
 function sanitizeNumeric(value: string): string {
@@ -357,7 +359,7 @@ export function LossOpportunityForm({
 
     setSubmitting(true);
     try {
-      const result = await createLossOpportunity(payload);
+      const result = await createLossOpportunity(payload, values.attachmentFile);
       if (result.ok) {
         const id = (result as { id?: number | null }).id ?? null;
         setStatus({
@@ -377,7 +379,11 @@ export function LossOpportunityForm({
           requestedQty: "",
           targetPrice: "",
           notes: "",
+          attachmentFile: null,
         }));
+        // Clear file input
+        const fileInput = document.getElementById("loss-attachment") as HTMLInputElement;
+        if (fileInput) fileInput.value = "";
         setCollectionsState(EMPTY_CATALOG);
         setColorsState(EMPTY_CATALOG);
         onCatalogStatus?.("collections", null);
@@ -649,6 +655,63 @@ export function LossOpportunityForm({
           onChange={(event) => handleValueChange("notes", event.target.value)}
           className="border-input focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30 w-full min-h-24 rounded-md border bg-transparent px-3 py-2 text-sm outline-none"
         />
+      </Field>
+
+      <Field
+        controlId="loss-attachment"
+        label="Adjuntar archivo (Opcional)"
+        description="Imagen (PNG, JPG) o PDF (máx. 5MB)"
+        error={errors.attachmentFile ?? null}
+      >
+        <div className="space-y-2">
+          <Input
+            id="loss-attachment"
+            type="file"
+            accept=".png,.jpg,.jpeg,.pdf"
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              if (file) {
+                // Validate file size (5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                  setErrors((prev) => ({ ...prev, attachmentFile: "El archivo no puede exceder 5MB" }));
+                  event.target.value = "";
+                  return;
+                }
+                // Validate file type
+                const validTypes = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
+                if (!validTypes.includes(file.type)) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    attachmentFile: "Solo se permiten archivos PNG, JPG o PDF",
+                  }));
+                  event.target.value = "";
+                  return;
+                }
+              }
+              setValues((prev) => ({ ...prev, attachmentFile: file }));
+              clearFieldError("attachmentFile");
+            }}
+            className="cursor-pointer file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+          />
+          {values.attachmentFile && (
+            <div className="flex items-center gap-2 rounded-md border border-muted bg-muted/20 px-3 py-2 text-sm">
+              <span className="flex-1 truncate">{values.attachmentFile.name}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setValues((prev) => ({ ...prev, attachmentFile: null }));
+                  const input = document.getElementById("loss-attachment") as HTMLInputElement;
+                  if (input) input.value = "";
+                }}
+                className="h-6 w-6 p-0"
+              >
+                ×
+              </Button>
+            </div>
+          )}
+        </div>
       </Field>
 
       <div className="space-y-3 md:flex md:items-center md:justify-between md:space-y-0">

@@ -15,14 +15,30 @@ type FutureSaleApiResponse = FormsApiResponse;
 
 export async function createLossOpportunity(
   payload: LossOpportunityPayload,
+  file?: File | null,
 ): Promise<LossOpportunityApiResponse> {
-  const response = await fetch("/api/forms/loss-opportunity", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
+
+  if (file) {
+    // Use FormData when there's a file
+    const formData = new FormData();
+    formData.append("payload", JSON.stringify(payload));
+    formData.append("attachment", file);
+
+    response = await fetch("/api/forms/loss-opportunity", {
+      method: "POST",
+      body: formData,
+    });
+  } else {
+    // Use JSON when there's no file
+    response = await fetch("/api/forms/loss-opportunity", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  }
 
   let json: LossOpportunityApiResponse | null = null;
   try {

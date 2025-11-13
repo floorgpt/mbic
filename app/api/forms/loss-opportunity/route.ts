@@ -15,18 +15,83 @@ import {
 } from "@/lib/forms/catalog";
 import type { LossOpportunityPayload } from "@/types/forms";
 
+import { createClient } from "@supabase/supabase-js";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const STRICT = process.env.FORMS_STRICT_CATALOGS === "true";
 
+async function uploadAttachmentToSupabase(file: File): Promise<{ url: string } | { error: string }> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return { error: "Supabase credentials not configured" };
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Generate unique filename with timestamp
+    const timestamp = Date.now();
+    const fileExtension = file.name.split(".").pop();
+    const filename = `loss-opp-${timestamp}.${fileExtension}`;
+
+    // Convert File to ArrayBuffer then to Buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from("loss-opportunity-attachments")
+      .upload(filename, buffer, {
+        contentType: file.type,
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (error) {
+      console.error("[forms] upload:error", error);
+      return { error: error.message };
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from("loss-opportunity-attachments")
+      .getPublicUrl(data.path);
+
+    return { url: urlData.publicUrl };
+  } catch (error) {
+    console.error("[forms] upload:exception", error);
+    return { error: error instanceof Error ? error.message : "Upload failed" };
+  }
+}
+
 export async function POST(request: Request) {
   let payload: LossOpportunityPayload | null = null;
+  let attachmentFile: File | null = null;
 
   try {
-    payload = (await request.json()) as LossOpportunityPayload;
+    const contentType = request.headers.get("content-type") || "";
+
+    if (contentType.includes("multipart/form-data")) {
+      // Handle FormData (with file)
+      const formData = await request.formData();
+      const payloadStr = formData.get("payload");
+      attachmentFile = formData.get("attachment") as File | null;
+
+      if (typeof payloadStr !== "string") {
+        throw new Error("Invalid payload in FormData");
+      }
+
+      payload = JSON.parse(payloadStr) as LossOpportunityPayload;
+    } else {
+      // Handle JSON (without file)
+      payload = (await request.json()) as LossOpportunityPayload;
+    }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid JSON payload";
+    const message = error instanceof Error ? error.message : "Invalid request payload";
     return NextResponse.json(
       {
         ok: false,
@@ -165,7 +230,30 @@ export async function POST(request: Request) {
       }
     }
 
-    const insertResult = await insertLossOpportunity(normalized);
+    // Handle file upload if present
+    let attachmentUrl: string | null = null;
+    if (attachmentFile) {
+      const uploadResult = await uploadAttachmentToSupabase(attachmentFile);
+      if ("error" in uploadResult) {
+        console.error("[forms] api/loss-opportunity:upload-failed", uploadResult.error);
+        return NextResponse.json(
+          {
+            ok: false,
+            err: `No pudimos subir el archivo: ${uploadResult.error}`,
+          },
+          { status: 500 },
+        );
+      }
+      attachmentUrl = uploadResult.url;
+    }
+
+    // Add attachment URL to normalized payload
+    const payloadWithAttachment = {
+      ...normalized,
+      attachmentUrl,
+    };
+
+    const insertResult = await insertLossOpportunity(payloadWithAttachment);
 
     if (!insertResult._meta.ok) {
       console.error("[forms] api/loss-opportunity:insert-failed", insertResult._meta);

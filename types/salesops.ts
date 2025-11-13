@@ -87,6 +87,7 @@ export type FutureOpportunityRow = {
 
 export type LossOpportunityRow = {
   id: number;
+  record_id: string | null;
   dealer: string;
   dealer_id: number;
   rep: string;
@@ -100,6 +101,7 @@ export type LossOpportunityRow = {
   potential_amount: number;
   reason: string;
   notes: string | null;
+  attachment_url: string | null;
   created_at: string;
 };
 
