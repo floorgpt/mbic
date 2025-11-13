@@ -17,6 +17,7 @@ import {
   type FutureOpportunityRow,
   type ImportLeadTimeRow,
   type InventoryTurnoverRow,
+  type LossOpportunityRow,
   type ReportsByMonthRow,
 } from "@/types/salesops";
 import type { IncomingStockRow } from "@/types/ops";
@@ -208,6 +209,26 @@ function mapFutureOpportunityRow(row: RawRow): FutureOpportunityRow {
   };
 }
 
+function mapLossOpportunityRow(row: RawRow): LossOpportunityRow {
+  return {
+    id: readNumber(row, ["id"]),
+    dealer: readString(row, ["dealer", "dealer_name"]),
+    dealer_id: readNumber(row, ["dealer_id"]),
+    rep: readString(row, ["rep", "rep_name"]),
+    rep_id: readNumber(row, ["rep_id"]),
+    category_key: readNullableString(row, ["category_key"]),
+    collection_key: readNullableString(row, ["collection_key"]),
+    color_name: readNullableString(row, ["color_name"]),
+    expected_sku: readNullableString(row, ["expected_sku", "sku"]),
+    requested_qty: readNumber(row, ["requested_qty", "qty", "quantity"]),
+    target_price: readNumber(row, ["target_price", "price"]),
+    potential_amount: readNumber(row, ["potential_amount", "amount"]),
+    reason: readString(row, ["reason"]),
+    notes: readNullableString(row, ["notes"]),
+    created_at: readString(row, ["created_at"]),
+  };
+}
+
 function readIncomingStockStatus(row: RawRow, keys: string[]): IncomingStockRow["eta_status"] {
   const value = pickValue<string>(row, keys, "pending") ?? "pending";
   const validStatuses = ["pending", "in_transit", "arrived", "delayed"];
@@ -390,4 +411,13 @@ export async function getIncomingStockByCollection(from: string, to: string): Pr
     [],
   );
   return mapSafeResult(safe, mapIncomingStockRow);
+}
+
+export async function getLossOpportunities(from: string, to: string): Promise<SafeResult<LossOpportunityRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<RawRow>("list_loss_opportunities", buildDateParams(from, to)),
+    "list_loss_opportunities",
+    [],
+  );
+  return mapSafeResult(safe, mapLossOpportunityRow);
 }

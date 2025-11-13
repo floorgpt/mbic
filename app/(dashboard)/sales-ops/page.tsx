@@ -9,6 +9,7 @@ import { TopCollections } from "@/components/sales-ops/top-collections-enhanced"
 import { ReportsTimeline } from "@/components/sales-ops/reports-timeline";
 import { FutureOppsCard } from "@/components/sales-ops/future-opps-card";
 import { IncomingStockCard } from "@/components/sales-ops/incoming-stock-card";
+import { LossOppsCard } from "@/components/sales-ops/loss-opps-card";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ import {
   getImportLeadTime,
   getIncomingStockByCollection,
   getInventoryTurnover,
+  getLossOpportunities,
   getReportsByMonth,
 } from "@/lib/mbic-supabase-salesops";
 import type {
@@ -41,6 +43,7 @@ import type {
   FutureOpportunityRow,
   ImportLeadTimeRow,
   InventoryTurnoverRow,
+  LossOpportunityRow,
   ReportsByMonthRow,
 } from "@/types/salesops";
 import type { IncomingStockRow } from "@/types/ops";
@@ -297,6 +300,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
   let collectionsMonthlyState: PanelState<CollectionMonthlyRow[]>;
   let futureOppsState: PanelState<FutureOpportunityRow[]>;
   let incomingStockState: PanelState<IncomingStockRow[]>;
+  let lossOppsState: PanelState<LossOpportunityRow[]>;
 
   if (envReady) {
     const panelPromises = [
@@ -313,6 +317,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
       getCollectionsMonthly(from, to),
       getFutureOppsOpen(from, to),
       getIncomingStockByCollection(from, to),
+      getLossOpportunities(from, to),
     ] as const;
 
     const [
@@ -329,6 +334,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
       collectionsMonthlyRes,
       futureOppsRes,
       incomingStockRes,
+      lossOppsRes,
     ] = await Promise.allSettled(panelPromises);
 
     categoryKpisState = resolvePanelResult(categoryKpisRes, [], "sales_ops_category_kpis");
@@ -352,6 +358,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
     );
     futureOppsState = resolvePanelResult(futureOppsRes, [], "list_future_sale_opps_open");
     incomingStockState = resolvePanelResult(incomingStockRes, [], "list_incoming_stock_by_collection");
+    lossOppsState = resolvePanelResult(lossOppsRes, [], "list_loss_opportunities");
   } else {
     const meta = createPanelErrorMeta(envWarningMessage ?? "Supabase credentials missing");
     categoryKpisState = { data: [], meta };
@@ -367,6 +374,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
     collectionsMonthlyState = { data: [], meta };
     futureOppsState = { data: [], meta };
     incomingStockState = { data: [], meta };
+    lossOppsState = { data: [], meta };
   }
 
   console.info("[salesops-panels]", {
@@ -385,6 +393,7 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
     collectionsMonthly: collectionsMonthlyState.meta,
     futureOpps: futureOppsState.meta,
     incomingStock: incomingStockState.meta,
+    lossOpps: lossOppsState.meta,
   });
 
   const totalRevenue = sumRevenue(categoryKpisState.data);
@@ -453,6 +462,12 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
     const dateA = a.eta_arrival_date ?? "";
     const dateB = b.eta_arrival_date ?? "";
     return dateA.localeCompare(dateB);
+  });
+
+  const lossOpps = lossOppsState.data.sort((a, b) => {
+    const dateA = a.created_at ?? "";
+    const dateB = b.created_at ?? "";
+    return dateB.localeCompare(dateA); // Most recent first
   });
 
   const envBanner = envWarningMessage ? (
@@ -666,6 +681,35 @@ export default async function SalesOpsPage({ searchParams }: SalesOpsPageProps) 
           <CardContent className="space-y-4 p-4 sm:p-6">
             {incomingStockState.meta.ok ? (
               <IncomingStockCard incomingStock={incomingStock} />
+            ) : (
+              <ThinkingPlaceholder />
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1">
+        <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
+          <CardHeader className="flex flex-col gap-2 p-4 pb-0 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-2xl font-semibold tracking-tight">
+                Loss Opportunities
+              </CardTitle>
+              <PanelFailureBadge meta={lossOppsState.meta} />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Track lost sales opportunities to identify patterns and improve future conversions. Toggle to show/hide details.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            {lossOppsState.meta.ok ? (
+              lossOpps.length ? (
+                <LossOppsCard opportunities={lossOpps} />
+              ) : (
+                <div className="rounded-xl border border-dashed border-muted bg-muted/40 p-6 text-sm text-muted-foreground">
+                  No loss opportunities recorded for this range.
+                </div>
+              )
             ) : (
               <ThinkingPlaceholder />
             )}

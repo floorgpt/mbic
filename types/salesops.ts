@@ -85,6 +85,24 @@ export type FutureOpportunityRow = {
   created_at: string;
 };
 
+export type LossOpportunityRow = {
+  id: number;
+  dealer: string;
+  dealer_id: number;
+  rep: string;
+  rep_id: number;
+  category_key: string | null;
+  collection_key: string | null;
+  color_name: string | null;
+  expected_sku: string | null;
+  requested_qty: number;
+  target_price: number;
+  potential_amount: number;
+  reason: string;
+  notes: string | null;
+  created_at: string;
+};
+
 export type IncomingStockRow = {
   collection: string;
   sku: string;
