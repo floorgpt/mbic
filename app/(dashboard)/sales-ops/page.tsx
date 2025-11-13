@@ -10,14 +10,11 @@ import { TopCollections } from "@/components/sales-ops/top-collections-enhanced"
 import { ReportsTimeline } from "@/components/sales-ops/reports-timeline";
 import { FutureOppsCard } from "@/components/sales-ops/future-opps-card";
 import { IncomingStockCard } from "@/components/sales-ops/incoming-stock-card";
-import { LossOppsCard } from "@/components/sales-ops/loss-opps-card";
 import { LossOpportunitiesSection } from "@/components/sales-ops/loss-opportunities-section";
 import { PageHeader } from "@/components/page-header";
 import { KpiCard } from "@/components/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { fmtPct0, fmtUSDCompact } from "@/lib/format";
 import {
   getCategoryKpis,

@@ -16,8 +16,6 @@ import {
 } from "recharts";
 import { fmtUSDCompact, fmtUSD2, fmtCompact } from "@/lib/format";
 import type { LossOpportunityRow } from "@/types/salesops";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -116,7 +114,7 @@ function formatTimeEST(dateString: string): string {
   });
 }
 
-export function LossOppsCard({ opportunities, isVisible, onToggleVisibility }: LossOppsCardProps) {
+export function LossOppsCard({ opportunities, isVisible }: LossOppsCardProps) {
   const [selectedOpp, setSelectedOpp] = React.useState<LossOpportunityRow | null>(null);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [attachmentOpen, setAttachmentOpen] = React.useState(false);
@@ -295,8 +293,8 @@ export function LossOppsCard({ opportunities, isVisible, onToggleVisibility }: L
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value: number, name: string, props: any) => [
-                          `${value} opportunities (${props.payload.percentage.toFixed(1)}%)`,
+                        formatter={(value: number, name: string, props: { payload?: { percentage?: number } }) => [
+                          `${value} opportunities (${props.payload?.percentage?.toFixed(1) ?? 0}%)`,
                           name,
                         ]}
                       />

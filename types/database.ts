@@ -82,6 +82,7 @@ export type LossOpportunityInsert = {
   collection?: string | null;
   color?: string | null;
   expected_sku?: string | null;
+  attachment_url?: string | null;
   created_at?: string | null;
   sku?: string | null;
 };
