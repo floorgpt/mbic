@@ -37,13 +37,13 @@ AS $$
     COALESCE(r.rep_name, 'Unknown') AS rep,
     lo.rep_id,
     lo.category_key,
-    lo.collection_key,
-    lo.color_name,
+    lo.collection AS collection_key,
+    lo.color AS color_name,
     lo.expected_sku,
     lo.requested_qty,
     lo.target_price,
     lo.potential_amount,
-    lo.reason,
+    lo.lost_reason AS reason,
     lo.notes,
     lo.created_at
   FROM public.loss_opportunities lo
