@@ -610,3 +610,150 @@ export async function getDealersByZipSafe(
     _meta: { ...safe._meta, count: mapped.length },
   };
 }
+
+// ============================================================================
+// DEALER & SALES PULSE DASHBOARD TYPES & FUNCTIONS
+// ============================================================================
+
+export type CategoryTrendRow = {
+  category_key: string;
+  display_name: string;
+  current_sales: number;
+  prior_sales: number;
+  trend_direction: "up" | "down" | "flat";
+  trend_pct: number;
+  collections: Array<{
+    collection_name: string;
+    sales: number;
+    share_pct: number;
+  }>;
+};
+
+export type RepVsTargetRow = {
+  rep_id: number;
+  rep_name: string;
+  rep_initials: string;
+  total_sales: number;
+  target_amount: number;
+  achievement_pct: number;
+  status: "exceeded" | "on-track" | "below-target";
+};
+
+export type CountySalesRow = {
+  zip_code: string;
+  county: string;
+  region: "South Florida" | "Central Florida" | "North Florida" | "Other Florida";
+  revenue: number;
+  dealer_count: number;
+  order_count: number;
+};
+
+export async function getCategoryTrendsByMonthSafe(
+  targetMonth: DateISO,
+): Promise<SafeResult<CategoryTrendRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string | unknown>>>(
+      "sales_category_trends_by_month",
+      {
+        p_target_month: targetMonth,
+        p_category: null,
+        p_collection: null,
+      },
+    ),
+    "sales_category_trends_by_month",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => {
+    const collectionsRaw = row.collections;
+    let collections: Array<{ collection_name: string; sales: number; share_pct: number }> = [];
+
+    if (typeof collectionsRaw === 'string') {
+      try {
+        collections = JSON.parse(collectionsRaw);
+      } catch {
+        collections = [];
+      }
+    } else if (Array.isArray(collectionsRaw)) {
+      collections = collectionsRaw;
+    }
+
+    return {
+      category_key: typeof row.category_key === "string" ? row.category_key : "uncategorized",
+      display_name: typeof row.display_name === "string" ? row.display_name : "Uncategorized",
+      current_sales: asNumber(row.current_sales as NumericLike, 0),
+      prior_sales: asNumber(row.prior_sales as NumericLike, 0),
+      trend_direction: (row.trend_direction === "up" || row.trend_direction === "down" || row.trend_direction === "flat"
+        ? row.trend_direction
+        : "flat") as "up" | "down" | "flat",
+      trend_pct: asNumber(row.trend_pct as NumericLike, 0),
+      collections,
+    };
+  });
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}
+
+export async function getRepsVsTargetsSafe(
+  from: DateISO,
+  to: DateISO,
+): Promise<SafeResult<RepVsTargetRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("sales_reps_vs_targets", {
+      from_date: from,
+      to_date: to,
+    }),
+    "sales_reps_vs_targets",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => ({
+    rep_id: asNumber(row.rep_id, 0),
+    rep_name: typeof row.rep_name === "string" ? row.rep_name : "Rep",
+    rep_initials: typeof row.rep_initials === "string" ? row.rep_initials : "??",
+    total_sales: asNumber(row.total_sales, 0),
+    target_amount: asNumber(row.target_amount, 200000),
+    achievement_pct: asNumber(row.achievement_pct, 0),
+    status: (row.status === "exceeded" || row.status === "on-track" || row.status === "below-target"
+      ? row.status
+      : "below-target") as "exceeded" | "on-track" | "below-target",
+  }));
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}
+
+export async function getSalesByCountyFlSafe(
+  from: DateISO,
+  to: DateISO,
+): Promise<SafeResult<CountySalesRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("sales_by_county_fl", {
+      from_date: from,
+      to_date: to,
+    }),
+    "sales_by_county_fl",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => ({
+    zip_code: typeof row.zip_code === "string" ? row.zip_code : "",
+    county: typeof row.county === "string" ? row.county : "Unknown",
+    region: (row.region === "South Florida" || row.region === "Central Florida" || row.region === "North Florida" || row.region === "Other Florida"
+      ? row.region
+      : "Other Florida") as "South Florida" | "Central Florida" | "North Florida" | "Other Florida",
+    revenue: asNumber(row.revenue, 0),
+    dealer_count: asNumber(row.dealer_count, 0),
+    order_count: asNumber(row.order_count, 0),
+  }));
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}

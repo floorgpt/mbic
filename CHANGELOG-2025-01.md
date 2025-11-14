@@ -1,15 +1,118 @@
 # MBIC Dashboard - January 2025 Changelog
 
-**Last Updated**: January 11, 2025
-**Status**: Ready for deployment (not yet pushed to GitHub/Netlify)
+**Last Updated**: January 14, 2025
+**Status**: Deployed to production (Netlify)
 
 ## Overview
 
-This document tracks all changes made to the MBIC Dashboard application during January 2025. The application is currently in a stable, bug-free state and ready for clean deployment to production.
+This document tracks all changes made to the MBIC Dashboard application during January 2025. The application has been enhanced with Dealer Pulse features, interactive sorting tables, and improved loading states.
 
 ---
 
-## 🎯 Key Improvements Summary
+## 📅 January 14, 2025 - Dealer Pulse & Interactive Tables
+
+### New Features
+
+#### 1. Dealer Sales Pulse Enhancement
+- **Added**: Navigation anchor to Sales Performance By Dealer section (#sales-performance-by-dealer)
+- **Added**: Excel/Google Sheets-style Rep filter in reactivated dealers table
+- **Improved**: Pagination reduced from 10 to 5 results per page
+- **Improved**: Dealer names truncated to 20 characters with hover tooltip
+- **Enhanced**: Eye icon navigation now scrolls to dealer section automatically
+- **Fixed**: Filtering updates narrative statistics (revenue/percentage) in real-time
+- **Component**: `components/dashboard/dealer-sales-pulse.tsx`
+
+#### 2. Reusable Loading Component
+- **Created**: `LoadingSpinner` component with 7 random loading messages
+- **Messages**: "Thinking", "Crunching Numbers", "Analyzing Data", "Processing", "Computing Results", "Loading Insights", "Gathering Intel"
+- **Features**: Configurable size (sm/md/lg), custom messages, pulsing animation
+- **Component**: `components/ui/loading-spinner.tsx`
+
+#### 3. Dashboard Table Sorting
+- **Created**: `TopDealersTable` component with interactive sorting
+  - Sortable columns: Revenue YTD, Monthly Avg, Share %
+  - Component: `components/dashboard/top-dealers-table.tsx`
+- **Created**: `TopRepsTable` component with interactive sorting
+  - Sortable columns: Revenue YTD, Monthly Avg, Active, Total, Active %
+  - Component: `components/dashboard/top-reps-table.tsx`
+- **Features**: Click to sort descending, click again to toggle ascending
+- **UI**: ArrowUpDown icons on all sortable columns
+
+#### 4. Dashboard UI Cleanup
+- **Hidden**: Dealer Engagement Heatmap section (commented out with note)
+- **Reason**: Redirects users to Dealer & Sales Pulse section for better insights
+- **File**: `app/(dashboard)/page.tsx:516-530`
+
+### Technical Changes
+
+#### File Changes
+1. **`app/(dashboard)/page.tsx`**
+   - Added imports for TopDealersTable and TopRepsTable
+   - Replaced static tables with client-side sortable components
+   - Commented out heatmap section
+
+2. **`app/(dashboard)/sales/page.tsx`**
+   - Added navigation anchor: `id="sales-performance-by-dealer"`
+
+3. **`components/dashboard/dealer-sales-pulse.tsx`**
+   - Added LoadingSpinner component usage
+   - Added Rep filter with Checkbox and Popover components
+   - Changed PAGE_SIZE from 10 to 5
+   - Updated narrative to use filtered dealer stats
+   - Truncated dealer names to 20 characters
+   - Enhanced navigation with hash anchor
+
+4. **`components/ui/loading-spinner.tsx`** (NEW)
+   - Random message selection on mount
+   - Loader2 icon with spin animation
+   - Configurable size and custom message support
+
+5. **`components/dashboard/top-dealers-table.tsx`** (NEW)
+   - Client component with useState for sort state
+   - Handles revenue, monthly_avg, share_pct sorting
+   - Maintains all original table styling
+
+6. **`components/dashboard/top-reps-table.tsx`** (NEW)
+   - Client component with useState for sort state
+   - Handles revenue, monthly_avg, active_customers, total_customers, active_pct sorting
+   - Maintains all original table styling
+
+### User Experience Improvements
+
+#### Dealer Pulse Drawer
+- Better space utilization with 5 results per page
+- Rep filtering allows focused analysis per sales rep
+- Filtered stats update narrative in real-time
+- Dealer name truncation prevents layout issues
+- Smooth scrolling to dealer section on navigation
+
+#### Dashboard Tables
+- Interactive sorting provides instant data reorganization
+- Visual feedback with ArrowUpDown icons
+- Sort direction toggles between ascending/descending
+- Default sort by revenue (most relevant metric)
+
+#### Loading States
+- Variety in loading messages reduces perceived wait time
+- Consistent loading experience across all components
+- Professional pulsing animation
+
+### Migration Notes
+
+#### Supabase Functions (Already Applied)
+- `dealer_activity_month_details(date)` - Returns comprehensive month data
+- `reactivated_dealers_by_month(date)` - Returns reactivated dealers with periods
+- `active_dealers_by_month(date)` - Returns active dealers list
+- `inactive_dealers_by_month(date)` - Returns inactive dealers list
+- `sales_org_dealer_engagement_trailing_v3(date, date)` - Fixed dealer counts
+
+#### Component Dependencies
+- Added shadcn/ui components: Checkbox, Popover
+- Installed via: `npx shadcn@latest add checkbox popover`
+
+---
+
+## 🎯 Key Improvements Summary (January 11, 2025)
 
 ### 1. Top Collections Enhancement (Dashboard & Sales-Ops)
 - **Fixed**: Collections data not displaying on Dashboard
@@ -417,16 +520,28 @@ These functions are optional enhancements. The UI shows "Data available soon" fa
 
 ## ✅ Summary
 
+### January 14, 2025 Deployment
+**Total Files Modified**: 6 files (4 modified + 2 new components)
+**New Components**: 3 (LoadingSpinner, TopDealersTable, TopRepsTable)
+**Features Added**: Interactive sorting, Rep filtering, Loading states, Navigation anchors
+**UI Improvements**: Hidden heatmap, Better spacing in drawer, Truncated dealer names
+**Status**: ✅ Deployed to production
+
+### January 11, 2025 Deployment
 **Total Files Modified**: 6 core files + 1 new component
 **Bugs Fixed**: 4 major issues
-**Features Added**: 3 new capabilities
+**Features Added**: 3 new capabilities (Collections pagination, Dealer drill-down, CSV export)
 **UI Improvements**: Comprehensive spacing and layout enhancements
+**Status**: ✅ Deployed to production
+
+### Overall Project Status
 **Documentation**: Complete and up-to-date
-**Status**: ✅ Ready for production deployment
-**Next Step**: Push to GitHub → Automatic Netlify deployment
+**Supabase Integration**: All required RPCs implemented
+**Production URL**: https://cpf-mbic2.netlify.app/
+**Next Step**: Monitor production performance and user feedback
 
 ---
 
-*Generated: January 11, 2025*
-*Last Review: Pre-deployment staging*
-*Version: 1.0.0*
+*Generated: January 14, 2025*
+*Last Review: Post-deployment verification*
+*Version: 1.1.0*

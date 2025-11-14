@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ZipSalesRow, DealerByZipRow } from "@/lib/mbic-supabase";
 import { fmtUSD0 } from "@/lib/format";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import {
@@ -35,10 +35,6 @@ type FloridaZipSalesMapProps = {
   dateRange: { from: string; to: string };
 };
 
-type GeoJSONFeature = Feature<Geometry, Record<string, unknown>> & {
-  id: string;
-};
-
 type GeoJSONData = FeatureCollection<Geometry, Record<string, unknown>>;
 
 export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps) {
@@ -50,6 +46,8 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
   const [selectedZip, setSelectedZip] = useState<string | null>(null);
   const [dealers, setDealers] = useState<DealerByZipRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 5;
 
   useEffect(() => {
     setIsMounted(true);
@@ -78,6 +76,7 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
     setSelectedZip(zipCode);
     setSheetOpen(true);
     setLoading(true);
+    setPage(0); // Reset pagination when opening new ZIP
 
     try {
       const response = await fetch(
@@ -281,9 +280,9 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
 
       {/* Dealer Details Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-md">
-          <SheetHeader className="space-y-3">
-            <SheetTitle>ZIP Code: {selectedZip}</SheetTitle>
+        <SheetContent className="w-full sm:max-w-md flex flex-col">
+          <SheetHeader className="space-y-3 flex-shrink-0">
+            <SheetTitle className="text-lg font-semibold">ZIP Code: {selectedZip}</SheetTitle>
             <SheetDescription asChild>
               <div>
                 {dealers.length > 0 && dealers[0].cities && (
@@ -311,8 +310,8 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-6">
-            <h3 className="mb-4 text-sm font-semibold">Dealers in this ZIP</h3>
+          <div className="mt-6 flex-1 flex flex-col min-h-0">
+            <h3 className="mb-4 text-sm font-semibold flex-shrink-0">Dealers in this ZIP</h3>
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -320,49 +319,87 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
             ) : dealers.length === 0 ? (
               <p className="text-sm text-muted-foreground">No dealers found</p>
             ) : (
-              <div className="space-y-3 px-2">
-                {dealers.map((dealer) => (
-                  <div
-                    key={dealer.customer_id}
-                    className="rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-muted/50"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm leading-tight mb-2">{dealer.dealer_name}</p>
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          <div className="flex justify-between">
-                            <span>Revenue:</span>
-                            <span className="font-medium text-foreground">{fmtUSD0(dealer.total_sales)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Orders:</span>
-                            <span className="font-medium text-foreground">{dealer.order_count}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span>Rep:</span>
-                            <span className="flex items-center gap-1.5">
-                              <span className="text-foreground">{dealer.rep_name}</span>
-                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
-                                {getRepInitials(dealer.rep_name)}
+              <>
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">
+                  {dealers.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((dealer) => (
+                    <div
+                      key={dealer.customer_id}
+                      className="rounded-lg border bg-card p-3.5 shadow-sm transition-colors hover:bg-muted/50"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm leading-tight mb-2 truncate">{dealer.dealer_name}</p>
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            <div className="flex justify-between">
+                              <span>Revenue:</span>
+                              <span className="font-medium text-foreground">{fmtUSD0(dealer.total_sales)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Orders:</span>
+                              <span className="font-medium text-foreground">{dealer.order_count}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span>Rep:</span>
+                              <span className="flex items-center gap-1.5">
+                                <span className="text-foreground truncate">{dealer.rep_name}</span>
+                                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] flex-shrink-0">
+                                  {getRepInitials(dealer.rep_name)}
+                                </span>
                               </span>
-                            </span>
+                            </div>
                           </div>
                         </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 flex-shrink-0"
+                          onClick={() =>
+                            handleDealerNavigation(dealer.customer_id, dealer.rep_name)
+                          }
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
                       </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination - only show if more than PAGE_SIZE dealers */}
+                {dealers.length > PAGE_SIZE && (
+                  <div className="flex-shrink-0 border-t pt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, dealers.length)} of {dealers.length}
+                    </span>
+                    <div className="flex items-center gap-2">
                       <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 flex-shrink-0"
-                        onClick={() =>
-                          handleDealerNavigation(dealer.customer_id, dealer.rep_name)
-                        }
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        className="h-7 w-7"
+                        aria-label="Previous page"
                       >
-                        <ArrowRight className="h-4 w-4" />
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span>
+                        Page {page + 1} / {Math.ceil(dealers.length / PAGE_SIZE)}
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={() => setPage((p) => Math.min(Math.ceil(dealers.length / PAGE_SIZE) - 1, p + 1))}
+                        disabled={page >= Math.ceil(dealers.length / PAGE_SIZE) - 1}
+                        className="h-7 w-7"
+                        aria-label="Next page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </SheetContent>

@@ -3,9 +3,12 @@ import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 import { ArrowUpRight, TrendingUp, Users } from "lucide-react";
 
-import { DealerHeatmap } from "@/components/dashboard/dealer-heatmap";
+// import { DealerHeatmap } from "@/components/dashboard/dealer-heatmap"; // Hidden - redirects to Dealer & Sales Pulse
+import { DealerSalesPulse } from "@/components/dashboard/dealer-sales-pulse";
 import { FloridaZipSalesMap } from "@/components/dashboard/florida-zip-sales-map";
 import { MonthlyRevenueTrend } from "@/components/dashboard/monthly-revenue-trend";
+import { TopDealersTable } from "@/components/dashboard/top-dealers-table";
+import { TopRepsTable } from "@/components/dashboard/top-reps-table";
 import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -512,6 +515,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </Card>
       </section>
 
+      {/* Dealer Engagement Heatmap - Hidden, use Dealer & Sales Pulse instead */}
+      {/*
       <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
         <CardHeader className="flex flex-col gap-3 p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-6">
           <div>
@@ -524,6 +529,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <DealerHeatmap data={engagementState.data ?? []} />
         </CardContent>
       </Card>
+      */}
+
+      <DealerSalesPulse />
 
       <section className="grid gap-6 lg:grid-cols-2">
         <Card className="rounded-2xl border border-black/5 bg-card shadow-sm">
@@ -536,41 +544,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardHeader>
           <CardContent className="p-0">
             {dealersState.data.length ? (
-              <>
-                <Table className="min-w-[640px]">
-                  <TableHeader className="sticky top-0 z-10 bg-card">
-                    <TableRow className="bg-card">
-                      <TableHead className="sticky top-0 bg-card">#</TableHead>
-                      <TableHead className="sticky top-0 bg-card">Dealer</TableHead>
-                      <TableHead className="sticky top-0 bg-card">Rep</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Revenue YTD</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Monthly Avg</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Share %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dealersState.data.map((dealer, index) => {
-                      const revenue = dealer.revenue ?? 0;
-                      const share = dealer.share_pct ?? (totalRevenue ? (revenue / totalRevenue) * 100 : 0);
-                      return (
-                        <TableRow key={`${dealer.dealer_name}-${index}`} className="h-12 odd:bg-muted/30">
-                          <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
-                          <TableCell className="font-medium">{dealer.dealer_name}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.rep_initials ?? "—"}</TableCell>
-                          <TableCell className="text-right tabular-nums">{fmtUSD0(revenue)}</TableCell>
-                          <TableCell className="text-right tabular-nums text-muted-foreground">
-                            {fmtUSD0(dealer.monthly_avg ?? 0)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums text-muted-foreground">{fmtPct0(share)}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-                <p className="px-4 pb-4 text-right text-xs uppercase tracking-wide text-muted-foreground">
-                  Scroll →
-                </p>
-              </>
+              <TopDealersTable dealers={dealersState.data} totalRevenue={totalRevenue} />
             ) : (
               <div className="px-4 pb-4">
                 <DataPlaceholder />
@@ -589,43 +563,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardHeader>
           <CardContent className="p-0">
             {repsState.data.length ? (
-              <>
-                <Table className="min-w-[720px]">
-                  <TableHeader className="sticky top-0 z-10 bg-card">
-                    <TableRow className="bg-card">
-                      <TableHead className="sticky top-0 bg-card">#</TableHead>
-                      <TableHead className="sticky top-0 bg-card">Rep</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Revenue YTD</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Monthly Avg</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Active</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Total</TableHead>
-                      <TableHead className="sticky top-0 bg-card text-right">Active %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {repsState.data.map((rep, index) => (
-                      <TableRow key={`${rep.rep_id}-${index}`} className="h-12 odd:bg-muted/30">
-                        <TableCell className="text-muted-foreground">#{index + 1}</TableCell>
-                        <TableCell className="font-medium">{rep.rep_name}</TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtUSD0(rep.revenue ?? 0)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {fmtUSD0(rep.monthly_avg ?? 0)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{formatNumber(rep.active_customers ?? 0)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {formatNumber(rep.total_customers ?? 0)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {rep.active_pct == null ? "—" : fmtPct0(rep.active_pct)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <p className="px-4 pb-4 text-right text-xs uppercase tracking-wide text-muted-foreground">
-                  Scroll →
-                </p>
-              </>
+              <TopRepsTable reps={repsState.data} />
             ) : (
               <div className="px-4 pb-4">
                 <DataPlaceholder />
