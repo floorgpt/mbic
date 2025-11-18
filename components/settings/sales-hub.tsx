@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -30,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type SalesRep = {
   rep_id: number;
@@ -47,11 +47,11 @@ type SalesTarget = {
 };
 
 export function SalesHubSettings() {
-  const { toast } = useToast();
   const [reps, setReps] = useState<SalesRep[]>([]);
   const [targets, setTargets] = useState<SalesTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Rep modal state
   const [repModalOpen, setRepModalOpen] = useState(false);
@@ -85,11 +85,7 @@ export function SalesHubSettings() {
       setTargets(targetsData.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load sales hub data",
-        variant: "destructive",
-      });
+      setMessage({ type: "error", text: "Failed to load sales hub data" });
     } finally {
       setLoading(false);
     }
@@ -109,11 +105,7 @@ export function SalesHubSettings() {
 
   const handleSaveRep = async () => {
     if (!repName.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Rep name is required",
-        variant: "destructive",
-      });
+      setMessage({ type: "error", text: "Rep name is required" });
       return;
     }
 
@@ -134,20 +126,16 @@ export function SalesHubSettings() {
         throw new Error("Failed to save rep");
       }
 
-      toast({
-        title: "Success",
-        description: editingRep ? "Rep updated successfully" : "Rep added successfully",
+      setMessage({
+        type: "success",
+        text: editingRep ? "Rep updated successfully" : "Rep added successfully",
       });
 
       setRepModalOpen(false);
       fetchData();
     } catch (error) {
       console.error("Error saving rep:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save rep",
-        variant: "destructive",
-      });
+      setMessage({ type: "error", text: "Failed to save rep" });
     } finally {
       setRepSaving(false);
     }
@@ -163,11 +151,7 @@ export function SalesHubSettings() {
 
     const amount = parseFloat(editTargetValue);
     if (isNaN(amount) || amount < 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a valid amount",
-        variant: "destructive",
-      });
+      setMessage({ type: "error", text: "Please enter a valid amount" });
       return;
     }
 
@@ -186,20 +170,13 @@ export function SalesHubSettings() {
         throw new Error("Failed to update target");
       }
 
-      toast({
-        title: "Success",
-        description: "Target updated successfully",
-      });
+      setMessage({ type: "success", text: "Target updated successfully" });
 
       setEditingTarget(null);
       fetchData();
     } catch (error) {
       console.error("Error saving target:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update target",
-        variant: "destructive",
-      });
+      setMessage({ type: "error", text: "Failed to update target" });
     }
   };
 
@@ -242,18 +219,17 @@ export function SalesHubSettings() {
       }
 
       const data = await res.json();
-      toast({
-        title: "Success",
-        description: data.message || "Targets uploaded successfully",
+      setMessage({
+        type: "success",
+        text: data.message || "Targets uploaded successfully",
       });
 
       fetchData();
     } catch (error) {
       console.error("Error uploading CSV:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to upload CSV",
-        variant: "destructive",
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to upload CSV",
       });
     } finally {
       setCsvUploading(false);
@@ -299,12 +275,27 @@ export function SalesHubSettings() {
     return `${selectedYear}-${month}`;
   });
 
+  // Auto-hide message after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
   if (loading) {
     return <div className="text-center py-8">Loading...</div>;
   }
 
   return (
     <div className="space-y-6">
+      {/* Success/Error Message */}
+      {message && (
+        <Alert variant={message.type === "error" ? "destructive" : "default"} className="mb-4">
+          <AlertDescription>{message.text}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Sales Reps Management */}
       <Card className="border-none bg-background">
         <CardHeader>
