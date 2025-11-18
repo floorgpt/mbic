@@ -121,6 +121,43 @@ export function DealerSalesPulse() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [dealerActivityData, setDealerActivityData] = useState<DealerActivityData[]>([]);
 
+  // Helper function to calculate gradient color based on achievement percentage
+  const getAchievementColor = (achievementPct: number): string => {
+    if (achievementPct < 50) {
+      // Red: less than 50%
+      return "#ef4444"; // red-500
+    } else if (achievementPct <= 70) {
+      // Red to Yellow: 51% - 70%
+      const ratio = (achievementPct - 50) / 20; // 0 to 1
+      return interpolateColor("#ef4444", "#eab308", ratio);
+    } else if (achievementPct <= 85) {
+      // Yellow to Pale Green: 71% - 85%
+      const ratio = (achievementPct - 70) / 15; // 0 to 1
+      return interpolateColor("#eab308", "#84cc16", ratio);
+    } else {
+      // Pale Green to Vivid Green: 86% - 100%+
+      const ratio = Math.min((achievementPct - 85) / 15, 1); // 0 to 1, capped at 1
+      return interpolateColor("#84cc16", "#22c55e", ratio);
+    }
+  };
+
+  // Helper function to interpolate between two hex colors
+  const interpolateColor = (color1: string, color2: string, ratio: number): string => {
+    const hex = (x: string) => parseInt(x, 16);
+    const r1 = hex(color1.substring(1, 3));
+    const g1 = hex(color1.substring(3, 5));
+    const b1 = hex(color1.substring(5, 7));
+    const r2 = hex(color2.substring(1, 3));
+    const g2 = hex(color2.substring(3, 5));
+    const b2 = hex(color2.substring(5, 7));
+
+    const r = Math.round(r1 + (r2 - r1) * ratio);
+    const g = Math.round(g1 + (g2 - g1) * ratio);
+    const b = Math.round(b1 + (b2 - b1) * ratio);
+
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  };
+
   // Drawer state
   const [sheetOpen, setSheetOpen] = useState(false);
   const [monthDetails, setMonthDetails] = useState<MonthDetails | null>(null);
@@ -229,7 +266,14 @@ export function DealerSalesPulse() {
       try {
         const targetsResponse = await fetch(`/api/team-vs-targets?targetMonth=${monthDate}`);
         const targetsData = await targetsResponse.json();
-        setTeamVsTargets(targetsData.data || []);
+        // Filter out Dismissed and Intercompany reps (trim to handle trailing spaces)
+        const filteredData = (targetsData.data || []).filter(
+          (rep: TeamVsTarget) => {
+            const repName = rep.rep_name?.trim().toLowerCase();
+            return repName !== "dismissed" && repName !== "intercompany";
+          }
+        );
+        setTeamVsTargets(filteredData);
       } catch (err) {
         console.error("Error fetching team vs targets:", err);
         setTeamVsTargets([]);
@@ -495,19 +539,20 @@ export function DealerSalesPulse() {
                   </div>
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={Math.max(220, teamVsTargets.length * 25)}>
                   <BarChart
                     data={teamVsTargets}
                     layout="vertical"
-                    margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                    margin={{ top: 5, right: 30, left: 5, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
                     <YAxis
                       type="category"
                       dataKey="rep_initials"
-                      width={35}
-                      tick={{ fontSize: 11 }}
+                      width={30}
+                      tick={{ fontSize: 10 }}
+                      interval={0}
                     />
                     <Tooltip
                       content={({ active, payload }) => {
@@ -535,13 +580,7 @@ export function DealerSalesPulse() {
                       {teamVsTargets.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
-                          fill={
-                            entry.status === "achieved"
-                              ? "#22c55e"
-                              : entry.status === "near"
-                              ? "#eab308"
-                              : "#ef4444"
-                          }
+                          fill={getAchievementColor(entry.achievement_pct)}
                         />
                       ))}
                     </Bar>

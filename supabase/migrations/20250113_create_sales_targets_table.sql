@@ -1,7 +1,7 @@
 -- Create sales_targets table to track monthly sales targets per rep
 CREATE TABLE IF NOT EXISTS sales_targets (
   id BIGSERIAL PRIMARY KEY,
-  rep_id INTEGER NOT NULL,
+  rep_id BIGINT NOT NULL,
   target_month TEXT NOT NULL, -- Format: YYYY-MM
   target_amount NUMERIC(12, 2) NOT NULL DEFAULT 200000.00,
   fiscal_year INTEGER NOT NULL,

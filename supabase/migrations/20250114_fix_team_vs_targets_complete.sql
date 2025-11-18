@@ -1,9 +1,14 @@
--- RPC function to get sales rep performance vs targets for a specific month
--- Returns actual sales vs target with variance for Team vs Targets chart
+-- Fix Team vs Targets: Schema + RPC Function
+-- Run this entire file in Supabase SQL Editor
 
--- Drop existing function if changing return type
+-- Step 1: Fix sales_targets table - change rep_id from INTEGER to BIGINT
+ALTER TABLE sales_targets
+  ALTER COLUMN rep_id TYPE BIGINT;
+
+-- Step 2: Drop existing function (required when changing return type)
 DROP FUNCTION IF EXISTS team_vs_targets_month(text);
 
+-- Step 3: Create the RPC function with correct BIGINT type
 CREATE OR REPLACE FUNCTION team_vs_targets_month(p_target_month text)
 RETURNS TABLE (
   rep_id bigint,
