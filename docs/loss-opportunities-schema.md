@@ -20,7 +20,7 @@ The `loss_opportunities` table tracks sales opportunities that were lost due to 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `due_to_stock` | boolean | YES | True if loss was due to stock unavailability |
-| `lost_reason` | text | NO | Reason code: `no_stock`, `price`, `competitor`, `cancelled`, `other` |
+| `lost_reason` | text | NO | Reason code: `no_stock`, `price`, `competitor`, `color_not_exist`, `other` |
 | `notes` | text | YES | Additional context or notes |
 
 ### Product Fields (Product Identification)
@@ -39,6 +39,13 @@ The `loss_opportunities` table tracks sales opportunities that were lost due to 
 | `updated_at` | timestamp | YES | Last update timestamp (if exists) |
 
 ## Recent Changes
+
+### 2025-01-14: Loss Reason Update
+- **Updated:** `lost_reason` value from `cancelled` to `color_not_exist`
+- **UI Label:** Changed from "Cancelado" to "Color No Existe"
+- **Reason:** Better describes the actual reason for lost opportunity (color doesn't exist in inventory)
+
+**Migration:** `20250114_update_loss_reason_cancelled_to_color_not_exist.sql`
 
 ### 2025-01-10: Target Price Addition
 - **Added:** `target_price` column (numeric, nullable)

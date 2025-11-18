@@ -11,7 +11,7 @@ import type {
   LossReason,
 } from "@/types/forms";
 
-const LOSS_REASONS: LossReason[] = ["no_stock", "price", "competitor", "cancelled", "other"];
+const LOSS_REASONS: LossReason[] = ["no_stock", "price", "competitor", "color_not_exist", "other"];
 
 export type NormalizedLossOpportunity = {
   repId: number;

@@ -25,7 +25,7 @@ export type ColorOption = {
   label: string;
 };
 
-export type LossReason = "no_stock" | "price" | "competitor" | "cancelled" | "other";
+export type LossReason = "no_stock" | "price" | "competitor" | "color_not_exist" | "other";
 
 export type LossOpportunityPayload = {
   repId: number;

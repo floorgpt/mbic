@@ -73,7 +73,7 @@ const LOSS_REASONS: Array<{ value: LossReason; label: string }> = [
   { value: "no_stock", label: "No stock" },
   { value: "price", label: "Precio" },
   { value: "competitor", label: "Competencia" },
-  { value: "cancelled", label: "Cancelado" },
+  { value: "color_not_exist", label: "Color No Existe" },
   { value: "other", label: "Otro" },
 ];
 
