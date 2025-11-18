@@ -302,7 +302,7 @@ export function SalesHubSettings() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="font-montserrat text-xl">Sales Representatives</CardTitle>
-              <CardDescription>Manage your sales team members</CardDescription>
+              <CardDescription>Manage your sales team members ({reps.length} total)</CardDescription>
             </div>
             <Button onClick={handleAddRep}>
               <Plus className="w-4 h-4 mr-2" />
@@ -311,33 +311,28 @@ export function SalesHubSettings() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="border rounded-lg">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reps.map((rep) => (
-                  <TableRow key={rep.rep_id}>
-                    <TableCell className="font-mono">{rep.rep_id}</TableCell>
-                    <TableCell className="font-medium">{rep.rep_name}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditRep(rep)}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {reps.map((rep) => (
+              <div
+                key={rep.rep_id}
+                className="flex items-center justify-between border rounded-lg p-3 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                    #{rep.rep_id}
+                  </span>
+                  <span className="font-medium">{rep.rep_name}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEditRep(rep)}
+                  className="h-8 w-8 p-0"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -382,69 +377,90 @@ export function SalesHubSettings() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="border rounded-lg overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 bg-muted z-10">Rep Name</TableHead>
-                  {months.map((month) => (
-                    <TableHead key={month} className="text-center min-w-[100px]">
-                      {new Date(month + "-01").toLocaleString("default", { month: "short" })}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(targetsByRep).map(([repId, data]) => (
-                  <TableRow key={repId}>
-                    <TableCell className="sticky left-0 bg-background font-medium">
-                      {data.rep_name}
-                    </TableCell>
-                    {months.map((month) => {
-                      const amount = data.targets[month] || 200000;
-                      const isEditing = editingTarget?.rep_id === parseInt(repId) && editingTarget?.month === month;
-
-                      return (
-                        <TableCell key={month} className="text-center">
-                          {isEditing ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                value={editTargetValue}
-                                onChange={(e) => setEditTargetValue(e.target.value)}
-                                className="w-24 h-8 text-xs"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleSaveTarget();
-                                  if (e.key === "Escape") setEditingTarget(null);
-                                }}
-                              />
-                              <Button size="sm" variant="ghost" onClick={handleSaveTarget} className="h-8 w-8 p-0">
-                                ✓
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setEditingTarget(null)} className="h-8 w-8 p-0">
-                                ✕
-                              </Button>
-                            </div>
-                          ) : (
-                            <button
-                              className="w-full h-full hover:bg-muted rounded px-2 py-1 text-sm"
-                              onClick={() => handleEditTarget(parseInt(repId), month, amount)}
-                            >
-                              ${(amount / 1000).toFixed(0)}k
-                            </button>
-                          )}
+          {Object.keys(targetsByRep).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No targets found for {selectedYear}</p>
+              <p className="text-sm mt-2">Targets loaded: {targets.length}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  console.log("Targets:", targets);
+                  console.log("Targets by rep:", targetsByRep);
+                  console.log("Months:", months);
+                }}
+              >
+                Debug: Log to Console
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="border rounded-lg overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky left-0 bg-muted z-10 min-w-[150px]">Rep Name</TableHead>
+                      {months.map((month) => (
+                        <TableHead key={month} className="text-center min-w-[100px]">
+                          {new Date(month + "-01").toLocaleString("en-US", { month: "short" })}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(targetsByRep).map(([repId, data]) => (
+                      <TableRow key={repId}>
+                        <TableCell className="sticky left-0 bg-background font-medium">
+                          {data.rep_name}
                         </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Click on any target amount to edit. Press Enter to save or Escape to cancel.
-          </p>
+                        {months.map((month) => {
+                          const amount = data.targets[month] || 200000;
+                          const isEditing = editingTarget?.rep_id === parseInt(repId) && editingTarget?.month === month;
+
+                          return (
+                            <TableCell key={month} className="text-center">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1 justify-center">
+                                  <Input
+                                    type="number"
+                                    value={editTargetValue}
+                                    onChange={(e) => setEditTargetValue(e.target.value)}
+                                    className="w-24 h-8 text-xs"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSaveTarget();
+                                      if (e.key === "Escape") setEditingTarget(null);
+                                    }}
+                                  />
+                                  <Button size="sm" variant="ghost" onClick={handleSaveTarget} className="h-8 w-8 p-0">
+                                    ✓
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setEditingTarget(null)} className="h-8 w-8 p-0">
+                                    ✕
+                                  </Button>
+                                </div>
+                              ) : (
+                                <button
+                                  className="w-full h-full hover:bg-muted rounded px-2 py-1 text-sm"
+                                  onClick={() => handleEditTarget(parseInt(repId), month, amount)}
+                                >
+                                  ${(amount / 1000).toFixed(0)}k
+                                </button>
+                              )}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Click on any target amount to edit. Press Enter to save or Escape to cancel.
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
 
