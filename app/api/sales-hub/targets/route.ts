@@ -14,10 +14,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("sales_targets")
-      .select(`
-        *,
-        sales_reps_demo!inner(rep_name)
-      `)
+      .select("*")
       .order("target_month", { ascending: true })
       .order("rep_id", { ascending: true });
 

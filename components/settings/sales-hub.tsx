@@ -43,7 +43,6 @@ type SalesTarget = {
   target_month: string;
   target_amount: number;
   fiscal_year: number;
-  sales_reps_demo?: { rep_name: string };
 };
 
 export function SalesHubSettings() {
@@ -65,6 +64,7 @@ export function SalesHubSettings() {
 
   // CSV upload state
   const [csvUploading, setCsvUploading] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -237,6 +237,51 @@ export function SalesHubSettings() {
     }
   };
 
+  const handleSeedTargets = async () => {
+    setSeeding(true);
+    try {
+      const year = parseInt(selectedYear);
+      const targetsToCreate = [];
+
+      for (const rep of reps) {
+        for (let month = 1; month <= 12; month++) {
+          const target_month = `${year}-${String(month).padStart(2, "0")}`;
+          targetsToCreate.push({
+            rep_id: rep.rep_id,
+            target_month,
+            target_amount: 200000,
+          });
+        }
+      }
+
+      const res = await fetch("/api/sales-hub/targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targets: targetsToCreate }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to seed targets");
+      }
+
+      const data = await res.json();
+      setMessage({
+        type: "success",
+        text: `Created ${targetsToCreate.length} targets for ${year}`,
+      });
+
+      fetchData();
+    } catch (error) {
+      console.error("Error seeding targets:", error);
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to seed targets",
+      });
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const downloadCsvTemplate = () => {
     const currentYear = new Date().getFullYear();
     const months = Array.from({ length: 12 }, (_, i) => `${currentYear}-${String(i + 1).padStart(2, "0")}`);
@@ -257,18 +302,21 @@ export function SalesHubSettings() {
     URL.revokeObjectURL(url);
   };
 
-  // Group targets by rep
-  const targetsByRep = targets.reduce((acc, target) => {
-    const repId = target.rep_id;
-    if (!acc[repId]) {
-      acc[repId] = {
-        rep_name: target.sales_reps_demo?.rep_name || "Unknown",
-        targets: {},
-      };
-    }
-    acc[repId].targets[target.target_month] = target.target_amount;
+  // Group targets by rep and merge with rep names
+  const targetsByRep = reps.reduce((acc, rep) => {
+    acc[rep.rep_id] = {
+      rep_name: rep.rep_name,
+      targets: {},
+    };
     return acc;
   }, {} as Record<number, { rep_name: string; targets: Record<string, number> }>);
+
+  // Fill in target amounts
+  targets.forEach((target) => {
+    if (targetsByRep[target.rep_id]) {
+      targetsByRep[target.rep_id].targets[target.target_month] = target.target_amount;
+    }
+  });
 
   const months = Array.from({ length: 12 }, (_, i) => {
     const month = String(i + 1).padStart(2, "0");
@@ -377,22 +425,40 @@ export function SalesHubSettings() {
           </div>
         </CardHeader>
         <CardContent>
-          {Object.keys(targetsByRep).length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No targets found for {selectedYear}</p>
-              <p className="text-sm mt-2">Targets loaded: {targets.length}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => {
-                  console.log("Targets:", targets);
-                  console.log("Targets by rep:", targetsByRep);
-                  console.log("Months:", months);
-                }}
-              >
-                Debug: Log to Console
-              </Button>
+          {targets.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <div className="max-w-md mx-auto">
+                <h3 className="text-lg font-semibold text-foreground mb-2">No Targets Set for {selectedYear}</h3>
+                <p className="text-sm mb-6">
+                  You haven't set any sales targets for this year yet. Would you like to create default targets
+                  of $200k/month for all {reps.length} sales reps?
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Button
+                    onClick={handleSeedTargets}
+                    disabled={seeding || reps.length === 0}
+                  >
+                    {seeding ? "Creating..." : `Create Targets for ${selectedYear}`}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      console.log("Reps:", reps);
+                      console.log("Targets:", targets);
+                      console.log("Targets by rep:", targetsByRep);
+                      console.log("Months:", months);
+                    }}
+                  >
+                    Debug Console
+                  </Button>
+                </div>
+                {reps.length === 0 && (
+                  <p className="text-xs text-destructive mt-4">
+                    Please add sales representatives first before creating targets.
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             <>
@@ -475,7 +541,7 @@ export function SalesHubSettings() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="rep-name">Rep Name</Label>
+              <Label htmlFor="rep-name">Full Name *</Label>
               <Input
                 id="rep-name"
                 value={repName}
@@ -483,6 +549,45 @@ export function SalesHubSettings() {
                 placeholder="e.g., Juan Pedro Boscan"
                 autoFocus
               />
+              <p className="text-xs text-muted-foreground">
+                This is the primary identifier for the sales representative
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="rep-email">Email</Label>
+                <Input
+                  id="rep-email"
+                  type="email"
+                  placeholder="email@example.com"
+                  disabled
+                />
+                <p className="text-xs text-muted-foreground">Coming soon</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rep-phone">Phone</Label>
+                <Input
+                  id="rep-phone"
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  disabled
+                />
+                <p className="text-xs text-muted-foreground">Coming soon</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rep-photo">Profile Picture</Label>
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                  {repName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "?"}
+                </div>
+                <Button variant="outline" size="sm" disabled>
+                  Upload Photo
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Coming soon</p>
             </div>
           </div>
           <DialogFooter>
