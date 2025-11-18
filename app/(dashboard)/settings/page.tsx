@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { WebhookModeToggle } from "@/components/forms/webhook-mode-toggle";
+import { SalesHubSettings } from "@/components/settings/sales-hub";
 import { getFormsWebhookSettings } from "@/lib/forms/settings";
 import {
   Tabs,
@@ -32,13 +33,18 @@ export default async function SettingsPage() {
         description="Manage API credentials, Retell automation hooks, and integrations for the MBIC platform."
       />
 
-      <Tabs defaultValue="apis" className="space-y-6">
+      <Tabs defaultValue="sales-hub" className="space-y-6">
         <TabsList className="w-full justify-start gap-2 bg-muted/60">
+          <TabsTrigger value="sales-hub">Sales Hub</TabsTrigger>
           <TabsTrigger value="apis">API Keys</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="forms">Forms</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="sales-hub" className="space-y-4">
+          <SalesHubSettings />
+        </TabsContent>
 
         <TabsContent value="apis" className="space-y-4">
           <Card className="border-none bg-background">
