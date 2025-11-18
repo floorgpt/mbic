@@ -95,6 +95,18 @@ type ActiveDealer = {
   order_count: number;
 };
 
+type TeamVsTarget = {
+  rep_id: number;
+  rep_name: string;
+  rep_initials: string;
+  target_amount: number;
+  actual_sales: number;
+  variance_amount: number;
+  variance_pct: number;
+  achievement_pct: number;
+  status: "achieved" | "near" | "below";
+};
+
 type InactiveDealer = {
   customer_id: number;
   dealer_name: string;
@@ -115,6 +127,7 @@ export function DealerSalesPulse() {
   const [reactivatedDealers, setReactivatedDealers] = useState<ReactivatedDealer[]>([]);
   const [activeDealers, setActiveDealers] = useState<ActiveDealer[]>([]);
   const [inactiveDealers, setInactiveDealers] = useState<InactiveDealer[]>([]);
+  const [teamVsTargets, setTeamVsTargets] = useState<TeamVsTarget[]>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 5;
@@ -211,6 +224,16 @@ export function DealerSalesPulse() {
       setReactivatedDealers(data.reactivatedDealers || []);
       setActiveDealers(data.activeDealers || []);
       setInactiveDealers(data.inactiveDealers || []);
+
+      // Fetch team vs targets data
+      try {
+        const targetsResponse = await fetch(`/api/team-vs-targets?targetMonth=${monthDate}`);
+        const targetsData = await targetsResponse.json();
+        setTeamVsTargets(targetsData.data || []);
+      } catch (err) {
+        console.error("Error fetching team vs targets:", err);
+        setTeamVsTargets([]);
+      }
     } catch (error) {
       console.error("Error fetching month details:", error);
     } finally {
@@ -452,12 +475,85 @@ export function DealerSalesPulse() {
             </div>
 
             {/* Child Chart 2 - Bottom Left - Team vs Targets */}
-            <div className="col-span-1 row-span-1 border border-dashed border-gray-300 rounded-lg p-4 sm:p-6 flex items-center justify-center min-h-[200px] lg:min-h-[300px]">
-              <div className="text-center text-gray-500">
-                <TrendingUp className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm font-medium">Team vs Targets</p>
-                <p className="text-xs mt-1 text-gray-400">Coming in Phase 6</p>
+            <div className="col-span-1 row-span-1 border border-gray-200 rounded-lg p-4 sm:p-6 bg-white min-h-[200px] lg:min-h-[300px]">
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-gray-900">Team vs Targets</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {selectedMonth ? `Performance for ${formatMonth(selectedMonth)}` : "Select a month to view"}
+                </p>
               </div>
+
+              {drawerLoading ? (
+                <div className="flex items-center justify-center h-48">
+                  <LoadingSpinner size="sm" />
+                </div>
+              ) : teamVsTargets.length === 0 ? (
+                <div className="flex items-center justify-center h-48 text-gray-400">
+                  <div className="text-center">
+                    <TrendingUp className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">No data available</p>
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart
+                    data={teamVsTargets}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+                    <YAxis
+                      type="category"
+                      dataKey="rep_initials"
+                      width={35}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload[0]) {
+                          const data = payload[0].payload as TeamVsTarget;
+                          return (
+                            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+                              <p className="text-xs font-semibold text-gray-900 mb-1">{data.rep_name}</p>
+                              <p className="text-xs text-gray-700">
+                                Actual: <span className="font-semibold">{fmtUSD0(data.actual_sales)}</span>
+                              </p>
+                              <p className="text-xs text-gray-700">
+                                Target: <span className="font-semibold">{fmtUSD0(data.target_amount)}</span>
+                              </p>
+                              <p className={`text-xs mt-1 font-medium ${data.variance_pct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {data.variance_pct >= 0 ? '+' : ''}{data.variance_pct.toFixed(1)}% ({data.achievement_pct.toFixed(0)}% of target)
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="actual_sales" radius={[0, 4, 4, 0]}>
+                      {teamVsTargets.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={
+                            entry.status === "achieved"
+                              ? "#22c55e"
+                              : entry.status === "near"
+                              ? "#eab308"
+                              : "#ef4444"
+                          }
+                        />
+                      ))}
+                    </Bar>
+                    <ReferenceLine
+                      x={teamVsTargets[0]?.target_amount || 200000}
+                      stroke="#6b7280"
+                      strokeDasharray="3 3"
+                      strokeWidth={1.5}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
 
             {/* Child Chart 3 - Bottom Right - Sales Per Region */}
