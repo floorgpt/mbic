@@ -127,3 +127,16 @@
     font-family: var(--font-montserrat);
   }
 }
+
+/* Leaflet map z-index fix - ensure map stays below overlays/drawers */
+.leaflet-container {
+  z-index: 0 !important;
+}
+
+/* Leaflet tooltip custom styles */
+.regional-tooltip {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1) !important;
+}
