@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 // GET transfer history for a customer
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const customerId = parseInt(params.id);
+    const { id } = await params;
+    const customerId = parseInt(id);
 
     if (isNaN(customerId)) {
       return NextResponse.json(
