@@ -22,10 +22,12 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdminClient();
 
     // Call the RPC function
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await supabase.rpc("team_vs_targets_month", {
-      p_target_month: monthStr,
-    } as any);
+    // Type assertion needed because Supabase types don't include this RPC's Args
+    const { data, error } = await supabase.rpc(
+      "team_vs_targets_month",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { p_target_month: monthStr } as any
+    );
 
     if (error) {
       console.error("[team-vs-targets] RPC error:", error);
