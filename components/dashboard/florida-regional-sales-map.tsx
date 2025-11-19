@@ -50,6 +50,10 @@ const Popup = dynamic(
   () => import("react-leaflet").then((mod) => mod.Popup),
   { ssr: false }
 );
+const Tooltip = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Tooltip),
+  { ssr: false }
+);
 
 type RegionalSalesMapProps = {
   data: CountySalesRow[];
@@ -68,6 +72,7 @@ type RegionSummary = {
 export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [geoData, setGeoData] = useState<GeoJSONData | null>(null);
+  const [zipGeoData, setZipGeoData] = useState<GeoJSONData | null>(null);
   const [L, setL] = useState<typeof import("leaflet") | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<RegionSummary | null>(null);
@@ -97,15 +102,77 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
     fetch("/geo/florida-regions.geojson")
       .then((res) => res.json())
       .then((geojson: GeoJSONData) => {
-        console.log("[FloridaRegionalSalesMap] GeoJSON loaded:", {
+        console.log("[FloridaRegionalSalesMap] Region GeoJSON loaded:", {
           featureCount: geojson.features.length,
         });
         setGeoData(geojson);
       })
       .catch((err) => {
-        console.error("[FloridaRegionalSalesMap] Failed to load GeoJSON:", err);
+        console.error("[FloridaRegionalSalesMap] Failed to load region GeoJSON:", err);
+      });
+
+    // Load GeoJSON for ZIP codes
+    fetch("/geo/florida-zips.geojson")
+      .then((res) => res.json())
+      .then((geojson: GeoJSONData) => {
+        console.log("[FloridaRegionalSalesMap] ZIP GeoJSON loaded:", {
+          featureCount: geojson.features.length,
+        });
+        setZipGeoData(geojson);
+      })
+      .catch((err) => {
+        console.error("[FloridaRegionalSalesMap] Failed to load ZIP GeoJSON:", err);
       });
   }, []);
+
+  // Calculate centroid from polygon coordinates
+  const calculateCentroid = (coordinates: number[][][]): [number, number] | null => {
+    try {
+      if (!coordinates || !coordinates[0] || coordinates[0].length === 0) {
+        return null;
+      }
+
+      const points = coordinates[0]; // Get outer ring
+      let sumLat = 0;
+      let sumLng = 0;
+      let count = 0;
+
+      for (const point of points) {
+        if (point && point.length >= 2) {
+          sumLng += point[0]; // Longitude
+          sumLat += point[1]; // Latitude
+          count++;
+        }
+      }
+
+      if (count === 0) return null;
+
+      return [sumLat / count, sumLng / count]; // [lat, lng]
+    } catch (error) {
+      console.error("[calculateCentroid] Error:", error);
+      return null;
+    }
+  };
+
+  // Build ZIP code to centroid mapping
+  const zipCentroids = new Map<string, [number, number]>();
+  if (zipGeoData) {
+    zipGeoData.features.forEach((feature) => {
+      const zipCodeFromId = feature.id?.toString();
+      const zipCodeFromProps = typeof feature.properties?.ZCTA5CE10 === "string"
+        ? feature.properties.ZCTA5CE10
+        : undefined;
+      const zipCode = zipCodeFromId || zipCodeFromProps;
+
+      if (zipCode && typeof zipCode === "string" && feature.geometry.type === "Polygon") {
+        const centroid = calculateCentroid(feature.geometry.coordinates as number[][][]);
+        if (centroid) {
+          zipCentroids.set(zipCode, centroid);
+        }
+      }
+    });
+    console.log("[FloridaRegionalSalesMap] Calculated centroids for", zipCentroids.size, "ZIP codes");
+  }
 
   // Prevent SSR hydration mismatch
   if (!isMounted || !geoData || !L) {
@@ -160,7 +227,7 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
   const minRevenue = Math.min(...revenues.filter((r) => r > 0), 0);
 
   // Aggregate data by ZIP code for circle markers
-  const zipSummaries = new Map<string, { zip: string; county: string; region: string; revenue: number; dealer_count: number; order_count: number; lat: number; lng: number }>();
+  const zipSummaries = new Map<string, { zip: string; city: string; county: string; region: string; revenue: number; dealer_count: number; order_count: number; lat: number; lng: number }>();
 
   data.forEach((row) => {
     if (row.region !== "Other Florida" && row.zip_code) {
@@ -170,32 +237,24 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
         existing.dealer_count += row.dealer_count;
         existing.order_count += row.order_count;
       } else {
-        // Approximate coordinates based on region and county
-        let lat = 27.9944024;
-        let lng = -81.7602544;
+        // Get accurate coordinates from ZIP centroid
+        const centroid = zipCentroids.get(row.zip_code);
 
-        // Simple coordinate approximation based on region
-        if (row.region === "South Florida") {
-          lat = 26.0 + Math.random() * 1.5;
-          lng = -80.3 - Math.random() * 1.5;
-        } else if (row.region === "Central Florida") {
-          lat = 27.5 + Math.random() * 1.3;
-          lng = -81.5 - Math.random() * 1.3;
-        } else if (row.region === "North Florida") {
-          lat = 29.5 + Math.random() * 1.5;
-          lng = -82.0 - Math.random() * 2.5;
+        if (centroid) {
+          zipSummaries.set(row.zip_code, {
+            zip: row.zip_code,
+            city: row.city,
+            county: row.county,
+            region: row.region,
+            revenue: row.revenue,
+            dealer_count: row.dealer_count,
+            order_count: row.order_count,
+            lat: centroid[0],
+            lng: centroid[1],
+          });
+        } else {
+          console.warn(`[FloridaRegionalSalesMap] No centroid found for ZIP ${row.zip_code}`);
         }
-
-        zipSummaries.set(row.zip_code, {
-          zip: row.zip_code,
-          county: row.county,
-          region: row.region,
-          revenue: row.revenue,
-          dealer_count: row.dealer_count,
-          order_count: row.order_count,
-          lat,
-          lng,
-        });
       }
     }
   });
@@ -431,13 +490,16 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                 },
               }}
             >
-              <Popup>
-                <div style={{ fontFamily: "sans-serif", minWidth: "150px" }}>
+              <Tooltip
+                sticky
+                className="regional-tooltip"
+              >
+                <div style={{ fontFamily: "sans-serif", minWidth: "180px", padding: "8px" }}>
                   <p style={{ fontWeight: 600, marginBottom: "8px", fontSize: "14px" }}>
-                    ZIP: {zipData.zip}
+                    {zipData.city}, FL {zipData.zip}
                   </p>
                   <p style={{ margin: "4px 0", fontSize: "12px" }}>
-                    <span style={{ color: "#6b7280" }}>County:</span> {zipData.county}
+                    <span style={{ color: "#6b7280" }}>County:</span> <strong>{zipData.county}</strong>
                   </p>
                   <p style={{ margin: "4px 0", fontSize: "12px" }}>
                     <span style={{ color: "#6b7280" }}>Revenue:</span> <strong>{fmtUSD0(zipData.revenue)}</strong>
@@ -448,11 +510,12 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                   <p style={{ margin: "4px 0", fontSize: "12px" }}>
                     <span style={{ color: "#6b7280" }}>Orders:</span> {zipData.order_count}
                   </p>
-                  <p style={{ marginTop: "8px", fontSize: "11px", color: "#6b7280", fontStyle: "italic" }}>
-                    Click to view region details
-                  </p>
+                  <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#3b82f6", fontWeight: 500 }}>
+                    <span>👁️</span>
+                    <span>Click to view details</span>
+                  </div>
                 </div>
-              </Popup>
+              </Tooltip>
             </CircleMarker>
           ))}
         </MapContainer>
