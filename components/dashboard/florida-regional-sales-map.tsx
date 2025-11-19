@@ -164,7 +164,7 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
         : undefined;
       const zipCode = zipCodeFromId || zipCodeFromProps;
 
-      if (zipCode && typeof zipCode === "string" && feature.geometry.type === "Polygon") {
+      if (zipCode && typeof zipCode === "string" && feature.geometry && feature.geometry.type === "Polygon") {
         const centroid = calculateCentroid(feature.geometry.coordinates as number[][][]);
         if (centroid) {
           zipCentroids.set(zipCode, centroid);
