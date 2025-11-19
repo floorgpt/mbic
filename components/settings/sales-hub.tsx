@@ -346,8 +346,15 @@ export function SalesHubSettings() {
     <div className="space-y-6">
       {/* Success/Error Message */}
       {message && (
-        <Alert variant={message.type === "error" ? "destructive" : "default"} className="mb-4">
-          <AlertDescription>{message.text}</AlertDescription>
+        <Alert
+          variant={message.type === "error" ? "destructive" : "default"}
+          className={`mb-4 ${
+            message.type === "success"
+              ? "bg-green-50 border-green-200 text-green-900 dark:bg-green-900/20 dark:border-green-800 dark:text-green-100"
+              : ""
+          }`}
+        >
+          <AlertDescription className="font-medium">{message.text}</AlertDescription>
         </Alert>
       )}
 

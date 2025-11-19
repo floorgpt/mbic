@@ -125,9 +125,14 @@ export function CustomersSection({
         throw new Error("Failed to save customer");
       }
 
+      const result = await res.json();
+      const savedCustomer = result.data;
+
       onMessage({
         type: "success",
-        text: editingCustomer ? "Customer updated successfully" : "Customer added successfully",
+        text: editingCustomer
+          ? `Customer "${savedCustomer.dealer_name}" updated successfully`
+          : `Customer "${savedCustomer.dealer_name}" added successfully to customers_demo table`,
       });
 
       setCustomerModalOpen(false);
@@ -135,11 +140,10 @@ export function CustomersSection({
 
       // Refresh selected customer if editing
       if (editingCustomer && selectedCustomer?.customer_id === editingCustomer.customer_id) {
-        const data = await res.json();
-        setSelectedCustomer(data.data);
+        setSelectedCustomer(savedCustomer);
 
         // Refresh transfer history
-        const historyRes = await fetch(`/api/sales-hub/customers/${data.data.customer_id}/history`);
+        const historyRes = await fetch(`/api/sales-hub/customers/${savedCustomer.customer_id}/history`);
         const historyData = await historyRes.json();
         setTransferHistory(historyData.data || []);
       }
