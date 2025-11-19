@@ -202,14 +202,14 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
       });
 
       // Hover effects
-      layer.on("mouseover", function () {
+      layer.on("mouseover", function (this: L.Path) {
         this.setStyle({
           weight: 3,
           fillOpacity: 0.9,
         });
       });
 
-      layer.on("mouseout", function () {
+      layer.on("mouseout", function (this: L.Path) {
         this.setStyle({
           weight: 2,
           fillOpacity: 0.7,
