@@ -236,7 +236,7 @@ export function SalesHubSettings() {
 
       const targets = lines.slice(1).map(line => {
         const values = line.split(",").map(v => v.trim());
-        const target: any = {};
+        const target: Record<string, string> = {};
         headers.forEach((header, index) => {
           target[header] = values[index];
         });
@@ -485,7 +485,7 @@ export function SalesHubSettings() {
               <div className="max-w-md mx-auto">
                 <h3 className="text-lg font-semibold text-foreground mb-2">No Targets Set for {selectedYear}</h3>
                 <p className="text-sm mb-6">
-                  You haven't set any sales targets for this year yet. Would you like to create default targets
+                  You haven&apos;t set any sales targets for this year yet. Would you like to create default targets
                   of $200k/month for all {reps.length} sales reps?
                 </p>
                 <div className="flex gap-3 justify-center">
