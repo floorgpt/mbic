@@ -641,6 +641,7 @@ export type RepVsTargetRow = {
 
 export type CountySalesRow = {
   zip_code: string;
+  city: string;
   county: string;
   region: "South Florida" | "Central Florida" | "North Florida" | "Other Florida";
   revenue: number;
@@ -743,6 +744,7 @@ export async function getSalesByCountyFlSafe(
 
   const mapped = (safe.data ?? []).map((row) => ({
     zip_code: typeof row.zip_code === "string" ? row.zip_code : "",
+    city: typeof row.city === "string" ? row.city : "Unknown",
     county: typeof row.county === "string" ? row.county : "Unknown",
     region: (row.region === "South Florida" || row.region === "Central Florida" || row.region === "North Florida" || row.region === "Other Florida"
       ? row.region

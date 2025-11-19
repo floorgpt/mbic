@@ -76,6 +76,7 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
   const [sortBy, setSortBy] = useState<"revenue" | "dealers" | "orders" | null>("revenue");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [visibleColumns, setVisibleColumns] = useState({
+    city: true,
     zip: true,
     county: true,
     revenue: true,
@@ -299,6 +300,28 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
   // Florida center coordinates
   const floridaCenter: [number, number] = [27.9944024, -81.7602544];
 
+  // Aggregate counties (sum up multiple ZIP codes in same county)
+  const aggregatedCounties = selectedRegion
+    ? Array.from(
+        selectedRegion.counties.reduce((acc, row) => {
+          const existing = acc.get(row.county);
+          if (existing) {
+            existing.revenue += row.revenue;
+            existing.dealer_count += row.dealer_count;
+            existing.order_count += row.order_count;
+          } else {
+            acc.set(row.county, {
+              county: row.county,
+              revenue: row.revenue,
+              dealer_count: row.dealer_count,
+              order_count: row.order_count,
+            });
+          }
+          return acc;
+        }, new Map<string, { county: string; revenue: number; dealer_count: number; order_count: number }>())
+      ).map(([_, county]) => county)
+    : [];
+
   // Sort counties based on current sort settings
   const sortedCounties = selectedRegion
     ? [...selectedRegion.counties].sort((a, b) => {
@@ -481,11 +504,13 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
           </SheetHeader>
 
           {/* Narrative Story Section */}
-          {selectedRegion && sortedCounties.length > 0 && (
+          {selectedRegion && aggregatedCounties.length > 0 && (
             <div className="mt-4 flex-shrink-0 rounded-lg border bg-muted/30 p-4">
               <p className="text-sm leading-relaxed text-foreground">
                 {(() => {
-                  const topCounty = sortedCounties[0];
+                  // Sort aggregated counties by revenue
+                  const sortedAggregated = [...aggregatedCounties].sort((a, b) => b.revenue - a.revenue);
+                  const topCounty = sortedAggregated[0];
                   const totalRevenue = selectedRegion.revenue;
                   const topCountyRevenue = topCounty.revenue;
                   const topCountyPercentage = ((topCountyRevenue / totalRevenue) * 100).toFixed(1);
@@ -497,9 +522,9 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                       <strong>{fmtUSD0(topCountyRevenue)}</strong> ({topCountyPercentage}% of regional revenue).{" "}
                       This region had a total of <strong>{selectedRegion.dealer_count}</strong> active dealers{" "}
                       generating <strong>{selectedRegion.order_count}</strong> orders.
-                      {sortedCounties.length > 1 && (
+                      {sortedAggregated.length > 1 && (
                         <>
-                          {" "}Other significant counties include <strong>{sortedCounties.slice(1, 3).map(c => c.county).join(" and ")}</strong>.
+                          {" "}Other significant counties include <strong>{sortedAggregated.slice(1, 3).map(c => c.county).join(" and ")}</strong>.
                         </>
                       )}
                     </>
@@ -522,6 +547,14 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuCheckboxItem
+                    checked={visibleColumns.city}
+                    onCheckedChange={(checked) =>
+                      setVisibleColumns({ ...visibleColumns, city: checked })
+                    }
+                  >
+                    City
+                  </DropdownMenuCheckboxItem>
                   <DropdownMenuCheckboxItem
                     checked={visibleColumns.zip}
                     onCheckedChange={(checked) =>
@@ -572,6 +605,9 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
+                      {visibleColumns.city && (
+                        <TableHead className="w-[140px]">City</TableHead>
+                      )}
                       {visibleColumns.zip && (
                         <TableHead className="w-[100px]">ZIP Code</TableHead>
                       )}
@@ -649,6 +685,9 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                   <TableBody>
                     {sortedCounties.map((county) => (
                       <TableRow key={`${county.county}-${county.zip_code}`}>
+                        {visibleColumns.city && (
+                          <TableCell className="text-sm">{county.city}</TableCell>
+                        )}
                         {visibleColumns.zip && (
                           <TableCell className="font-mono text-xs">{county.zip_code}</TableCell>
                         )}
