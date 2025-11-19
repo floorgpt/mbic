@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CountySalesRow } from "@/lib/mbic-supabase";
+import type { CountySalesRow, ZipDealerRow } from "@/lib/mbic-supabase";
+import { getDealersByZipFlSafe } from "@/lib/mbic-supabase";
 import { fmtUSD0 } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import {
@@ -21,13 +23,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Layers, Circle, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Layers, Circle, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, ArrowLeft, Filter, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DataChat } from "@/components/ui/data-chat";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 // Dynamically import Leaflet components to avoid SSR issues
 const MapContainer = dynamic(
@@ -57,6 +68,8 @@ const Tooltip = dynamic(
 
 type RegionalSalesMapProps = {
   data: CountySalesRow[];
+  fromDate: string;
+  toDate: string;
 };
 
 type GeoJSONData = FeatureCollection<Geometry, Record<string, unknown>>;
@@ -69,13 +82,31 @@ type RegionSummary = {
   counties: CountySalesRow[];
 };
 
-export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
+type ZipSummary = {
+  zip: string;
+  city: string;
+  county: string;
+  region: string;
+  revenue: number;
+  dealer_count: number;
+  order_count: number;
+  lat: number;
+  lng: number;
+};
+
+type DrawerMode = "region" | "zip";
+
+export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSalesMapProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [geoData, setGeoData] = useState<GeoJSONData | null>(null);
   const [zipGeoData, setZipGeoData] = useState<GeoJSONData | null>(null);
   const [L, setL] = useState<typeof import("leaflet") | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>("region");
   const [selectedRegion, setSelectedRegion] = useState<RegionSummary | null>(null);
+  const [selectedZip, setSelectedZip] = useState<ZipSummary | null>(null);
+  const [zipDealers, setZipDealers] = useState<ZipDealerRow[]>([]);
+  const [loadingZipData, setLoadingZipData] = useState(false);
   const [showRegions, setShowRegions] = useState(true);
   const [showCircles, setShowCircles] = useState(true);
   const [sortBy, setSortBy] = useState<"revenue" | "dealers" | "orders" | null>("revenue");
@@ -88,6 +119,12 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
     dealers: true,
     orders: true,
   });
+  const [cityFilter, setCityFilter] = useState<string[]>([]);
+  const [countyFilter, setCountyFilter] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
+  const [citySearchQuery, setCitySearchQuery] = useState("");
+  const [showChat, setShowChat] = useState(true);
 
   useEffect(() => {
     setIsMounted(true);
@@ -124,6 +161,11 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
         console.error("[FloridaRegionalSalesMap] Failed to load ZIP GeoJSON:", err);
       });
   }, []);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [cityFilter, countyFilter]);
 
   // Calculate centroid from polygon coordinates
   const calculateCentroid = (coordinates: number[][][]): [number, number] | null => {
@@ -336,6 +378,7 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
       // Click to open sheet with county breakdown
       layer.on("click", () => {
         setSelectedRegion(summary);
+        setDrawerMode("region");
         setSheetOpen(true);
       });
 
@@ -381,24 +424,52 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
       ).map(([_, county]) => county)
     : [];
 
-  // Sort counties based on current sort settings
+  // Filter and sort counties based on current settings
   const sortedCounties = selectedRegion
-    ? [...selectedRegion.counties].sort((a, b) => {
-        let comparison = 0;
+    ? [...selectedRegion.counties]
+        .filter((county) => {
+          // Apply city filter
+          if (cityFilter.length > 0 && !cityFilter.includes(county.city)) {
+            return false;
+          }
+          // Apply county filter
+          if (countyFilter.length > 0 && !countyFilter.includes(county.county)) {
+            return false;
+          }
+          return true;
+        })
+        .sort((a, b) => {
+          let comparison = 0;
 
-        if (sortBy === "revenue") {
-          comparison = a.revenue - b.revenue;
-        } else if (sortBy === "dealers") {
-          comparison = a.dealer_count - b.dealer_count;
-        } else if (sortBy === "orders") {
-          comparison = a.order_count - b.order_count;
-        } else {
-          // Default to revenue
-          comparison = a.revenue - b.revenue;
-        }
+          if (sortBy === "revenue") {
+            comparison = a.revenue - b.revenue;
+          } else if (sortBy === "dealers") {
+            comparison = a.dealer_count - b.dealer_count;
+          } else if (sortBy === "orders") {
+            comparison = a.order_count - b.order_count;
+          } else {
+            // Default to revenue
+            comparison = a.revenue - b.revenue;
+          }
 
-        return sortOrder === "asc" ? comparison : -comparison;
-      })
+          // If primary sort is equal, chain secondary sorts
+          if (comparison === 0) {
+            // Secondary: Always sort by revenue if not already primary
+            if (sortBy !== "revenue") {
+              comparison = a.revenue - b.revenue;
+            }
+            // Tertiary: Sort by dealer count
+            if (comparison === 0 && sortBy !== "dealers") {
+              comparison = a.dealer_count - b.dealer_count;
+            }
+            // Quaternary: Sort by city name alphabetically
+            if (comparison === 0) {
+              comparison = a.city.localeCompare(b.city);
+            }
+          }
+
+          return sortOrder === "asc" ? comparison : -comparison;
+        })
     : [];
 
   const handleSort = (column: "revenue" | "dealers" | "orders") => {
@@ -412,9 +483,45 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
     }
   };
 
+  // Get unique cities and counties for filter dropdowns
+  const uniqueCities = selectedRegion
+    ? Array.from(new Set(selectedRegion.counties.map((c) => c.city))).sort()
+    : [];
+  const uniqueCounties = selectedRegion
+    ? Array.from(new Set(selectedRegion.counties.map((c) => c.county))).sort()
+    : [];
+
+  // Debug logging for filters
+  if (selectedRegion && sheetOpen) {
+    console.log(`[Filter Debug] Region: ${selectedRegion.region}`);
+    console.log(`[Filter Debug] Total ZIP rows in region:`, selectedRegion.counties.length);
+    console.log(`[Filter Debug] Unique cities (${uniqueCities.length}):`, uniqueCities);
+    console.log(`[Filter Debug] Unique counties (${uniqueCounties.length}):`, uniqueCounties);
+  }
+
+  // Calculate filtered totals and narrative
+  const isFiltered = cityFilter.length > 0 || countyFilter.length > 0;
+  const filteredTotals = isFiltered
+    ? sortedCounties.reduce(
+        (acc, county) => ({
+          revenue: acc.revenue + county.revenue,
+          dealer_count: acc.dealer_count + county.dealer_count,
+          order_count: acc.order_count + county.order_count,
+        }),
+        { revenue: 0, dealer_count: 0, order_count: 0 }
+      )
+    : null;
+
+  // Pagination
+  const totalPages = Math.ceil(sortedCounties.length / rowsPerPage);
+  const paginatedCounties = sortedCounties.slice(
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
+  );
+
   return (
     <>
-      <div className="relative z-0 h-full w-full min-h-[250px]">
+      <div className="relative z-0 h-full w-full min-h-[250px] flex flex-col pb-2">
         {/* Toggle Controls */}
         <div className="absolute top-2 right-2 z-10 flex gap-2">
           <Button
@@ -437,14 +544,15 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
           </Button>
         </div>
 
-        <MapContainer
-          center={floridaCenter}
-          zoom={6.5}
-          style={{ height: "100%", width: "100%", minHeight: "250px" }}
-          className="rounded-lg"
-          zoomControl={false}
-          attributionControl={false}
-        >
+        <div className="flex-1 min-h-0">
+          <MapContainer
+            center={floridaCenter}
+            zoom={6.5}
+            style={{ height: "100%", width: "100%", minHeight: "250px" }}
+            className="rounded-lg"
+            zoomControl={false}
+            attributionControl={false}
+          >
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -468,13 +576,23 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                 weight: 2,
               }}
               eventHandlers={{
-                click: () => {
-                  // When circle is clicked, find the region and open drawer
+                click: async () => {
+                  // Fetch dealer data for this ZIP and switch to ZIP mode
+                  setLoadingZipData(true);
+                  setSelectedZip(zipData);
+
+                  // Also set the region so back button works correctly
                   const region = regionSummaries.get(zipData.region);
                   if (region) {
                     setSelectedRegion(region);
-                    setSheetOpen(true);
                   }
+
+                  setDrawerMode("zip");
+                  setSheetOpen(true);
+
+                  const result = await getDealersByZipFlSafe(zipData.zip, fromDate, toDate);
+                  setZipDealers(result.data || []);
+                  setLoadingZipData(false);
                 },
                 mouseover: (e) => {
                   e.target.setStyle({
@@ -519,9 +637,10 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
             </CircleMarker>
           ))}
         </MapContainer>
+        </div>
 
         {/* Legend */}
-        <div className="mt-2 flex items-center justify-center gap-3 text-[10px]">
+        <div className="flex-shrink-0 mt-1 flex items-center justify-center gap-3 text-[10px]">
           <span className="text-muted-foreground">Lower</span>
           <div className="flex gap-0.5">
             <div className="h-3 w-6 bg-green-500" />
@@ -537,37 +656,92 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full sm:max-w-2xl md:max-w-3xl flex flex-col z-50 px-6">
           <SheetHeader className="space-y-3 flex-shrink-0 pb-4">
-            <SheetTitle className="text-lg font-semibold">
-              {selectedRegion?.region}
-            </SheetTitle>
+            <div className="flex items-center gap-2">
+              {drawerMode === "zip" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDrawerMode("region");
+                    setCityFilter([]);
+                    setCountyFilter([]);
+                  }}
+                  className="h-8"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
+              <SheetTitle className="text-lg font-semibold">
+                {drawerMode === "region"
+                  ? selectedRegion?.region
+                  : `${selectedZip?.city}, FL ${selectedZip?.zip}`}
+              </SheetTitle>
+            </div>
             <SheetDescription asChild>
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/50 p-3 text-sm">
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Revenue</p>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {drawerMode === "region" ? "Revenue" : "Total Revenue"}
+                    </p>
                     <p className="font-semibold text-foreground">
-                      {selectedRegion ? fmtUSD0(selectedRegion.revenue) : "$0"}
+                      {drawerMode === "region"
+                        ? selectedRegion ? fmtUSD0(selectedRegion.revenue) : "$0"
+                        : selectedZip ? fmtUSD0(selectedZip.revenue) : "$0"}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Dealers</p>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {drawerMode === "region" ? "Dealers" : "Dealers"}
+                    </p>
                     <p className="font-semibold text-foreground">
-                      {selectedRegion?.dealer_count ?? 0}
+                      {drawerMode === "region"
+                        ? selectedRegion?.dealer_count ?? 0
+                        : selectedZip?.dealer_count ?? 0}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Orders</p>
                     <p className="font-semibold text-foreground">
-                      {selectedRegion?.order_count ?? 0}
+                      {drawerMode === "region"
+                        ? selectedRegion?.order_count ?? 0
+                        : selectedZip?.order_count ?? 0}
                     </p>
                   </div>
                 </div>
+                {drawerMode === "zip" && selectedZip && (
+                  <div className="text-xs text-muted-foreground">
+                    <p>County: <span className="font-medium text-foreground">{selectedZip.county}</span></p>
+                    <p>Region: <span className="font-medium text-foreground">{selectedZip.region}</span></p>
+                  </div>
+                )}
               </div>
             </SheetDescription>
           </SheetHeader>
 
-          {/* Narrative Story Section */}
-          {selectedRegion && aggregatedCounties.length > 0 && (
+          {/* Filtered Summary Card - Shows when filters are active */}
+          {drawerMode === "region" && isFiltered && filteredTotals && sortedCounties.length > 0 && (
+            <div className="mt-4 flex-shrink-0 rounded-lg border border-primary bg-primary/5 p-4">
+              <h4 className="text-sm font-semibold mb-3">Filtered Selection</h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Revenue</p>
+                  <p className="font-semibold text-foreground">{fmtUSD0(filteredTotals.revenue)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Dealers</p>
+                  <p className="font-semibold text-foreground">{filteredTotals.dealer_count}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Orders</p>
+                  <p className="font-semibold text-foreground">{filteredTotals.order_count}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Narrative Story Section - Region Mode Only */}
+          {drawerMode === "region" && selectedRegion && aggregatedCounties.length > 0 && (
             <div className="mt-4 flex-shrink-0 rounded-lg border bg-muted/30 p-4">
               <p className="text-sm leading-relaxed text-foreground">
                 {(() => {
@@ -597,16 +771,211 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
             </div>
           )}
 
-          <div className="mt-6 flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h3 className="text-sm font-semibold">
-                County Breakdown ({sortedCounties.length})
-              </h3>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8">
-                    <Eye className="h-3.5 w-3.5 mr-1.5" />
-                    Columns
+          {/* Filtered Narrative - Shows when filters are active */}
+          {drawerMode === "region" && isFiltered && filteredTotals && sortedCounties.length > 0 && (
+            <div className="mt-4 flex-shrink-0 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-4">
+              <p className="text-sm leading-relaxed text-foreground">
+                {(() => {
+                  // Aggregate by city to get total revenue per city across all ZIPs
+                  const cityAggregates = sortedCounties.reduce((acc, row) => {
+                    const existing = acc.get(row.city);
+                    if (existing) {
+                      existing.revenue += row.revenue;
+                      existing.dealer_count += row.dealer_count;
+                      existing.order_count += row.order_count;
+                      existing.zip_count += 1;
+                      existing.counties.add(row.county);
+                    } else {
+                      acc.set(row.city, {
+                        city: row.city,
+                        revenue: row.revenue,
+                        dealer_count: row.dealer_count,
+                        order_count: row.order_count,
+                        zip_count: 1,
+                        counties: new Set([row.county]),
+                      });
+                    }
+                    return acc;
+                  }, new Map<string, { city: string; revenue: number; dealer_count: number; order_count: number; zip_count: number; counties: Set<string> }>());
+
+                  console.log("[Filtered Narrative] City Aggregates:", Array.from(cityAggregates.entries()).map(([city, data]) => ({
+                    city,
+                    zip_count: data.zip_count,
+                    revenue: data.revenue,
+                    dealer_count: data.dealer_count,
+                  })));
+
+                  const topCity = Array.from(cityAggregates.values()).sort((a, b) => b.revenue - a.revenue)[0];
+                  const topCityPercentage = ((topCity.revenue / filteredTotals.revenue) * 100).toFixed(1);
+
+                  const filterDescription = [];
+                  if (cityFilter.length > 0) {
+                    filterDescription.push(cityFilter.length === 1 ? cityFilter[0] : `${cityFilter.length} cities`);
+                  }
+                  if (countyFilter.length > 0) {
+                    filterDescription.push(countyFilter.length === 1 ? `${countyFilter[0]} County` : `${countyFilter.length} counties`);
+                  }
+
+                  const uniqueZipCount = sortedCounties.length;
+                  const uniqueCityCount = cityAggregates.size;
+
+                  return (
+                    <>
+                      Filtering by <strong>{filterDescription.join(" in ")}</strong> ({uniqueCityCount} {uniqueCityCount === 1 ? "city" : "cities"} across {uniqueZipCount} ZIP{uniqueZipCount === 1 ? "" : "s"}), total sales resulted in{" "}
+                      <strong>{fmtUSD0(filteredTotals.revenue)}</strong>, driven by{" "}
+                      <strong>{topCity.city}</strong> ({topCity.zip_count} ZIP{topCity.zip_count === 1 ? "" : "s"}) with{" "}
+                      <strong>{fmtUSD0(topCity.revenue)}</strong> representing{" "}
+                      <strong>{topCityPercentage}%</strong> of the filtered total.{" "}
+                      This selection includes <strong>{filteredTotals.dealer_count}</strong> active dealers{" "}
+                      generating <strong>{filteredTotals.order_count}</strong> orders.
+                    </>
+                  );
+                })()}
+              </p>
+            </div>
+          )}
+
+          {/* Region Mode: County Breakdown Table */}
+          {drawerMode === "region" && (
+            <div className="mt-6 flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                <h3 className="text-sm font-semibold">
+                  County Breakdown ({sortedCounties.length})
+                </h3>
+                <div className="flex items-center gap-2">
+                  {/* City Filter */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={cityFilter.length > 0 ? "default" : "outline"}
+                        size="sm"
+                        className="h-8"
+                      >
+                        <Filter className="h-3.5 w-3.5 mr-1.5" />
+                        City {cityFilter.length > 0 && `(${cityFilter.length})`}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64" align="end">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold">Filter by City</h4>
+                          {cityFilter.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCityFilter([])}
+                              className="h-6 px-2 text-xs"
+                            >
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {cityFilter.length === 0 ? "Select cities to filter" : `${cityFilter.length} selected`}
+                        </div>
+                        {/* Search Input */}
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="text"
+                            placeholder="Search cities..."
+                            value={citySearchQuery}
+                            onChange={(e) => setCitySearchQuery(e.target.value)}
+                            className="h-9 pl-9 text-sm"
+                          />
+                        </div>
+                        <div className="max-h-72 overflow-y-auto space-y-2 border rounded-md p-2">
+                          {uniqueCities
+                            .filter((city) =>
+                              city.toLowerCase().includes(citySearchQuery.toLowerCase())
+                            )
+                            .map((city) => (
+                            <div key={city} className="flex items-center space-x-2 py-1 px-1 hover:bg-muted/50 rounded">
+                              <Checkbox
+                                id={`city-${city}`}
+                                checked={cityFilter.includes(city)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setCityFilter([...cityFilter, city]);
+                                  } else {
+                                    setCityFilter(cityFilter.filter((c) => c !== city));
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`city-${city}`}
+                                className="text-sm cursor-pointer flex-1 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              >
+                                {city}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* County Filter */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={countyFilter.length > 0 ? "default" : "outline"}
+                        size="sm"
+                        className="h-8"
+                      >
+                        <Filter className="h-3.5 w-3.5 mr-1.5" />
+                        County {countyFilter.length > 0 && `(${countyFilter.length})`}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64" align="end">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold">Filter by County</h4>
+                          {countyFilter.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCountyFilter([])}
+                              className="h-6 px-2 text-xs"
+                            >
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {countyFilter.length === 0 ? "Select counties to filter" : `${countyFilter.length} selected`}
+                        </div>
+                        <div className="max-h-72 overflow-y-auto space-y-2 border rounded-md p-2">
+                          {uniqueCounties.map((county) => (
+                            <div key={county} className="flex items-center space-x-2 py-1 px-1 hover:bg-muted/50 rounded">
+                              <Checkbox
+                                id={`county-${county}`}
+                                checked={countyFilter.includes(county)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setCountyFilter([...countyFilter, county]);
+                                  } else {
+                                    setCountyFilter(countyFilter.filter((c) => c !== county));
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`county-${county}`}
+                                className="text-sm cursor-pointer flex-1 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              >
+                                {county}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8">
+                        <Eye className="h-3.5 w-3.5 mr-1.5" />
+                        Columns
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -660,7 +1029,8 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                   </DropdownMenuCheckboxItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
+                </div>
+              </div>
             {sortedCounties.length === 0 ? (
               <p className="text-sm text-muted-foreground">No county data available</p>
             ) : (
@@ -746,7 +1116,7 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedCounties.map((county) => (
+                    {paginatedCounties.map((county) => (
                       <TableRow key={`${county.county}-${county.zip_code}`}>
                         {visibleColumns.city && (
                           <TableCell className="text-sm">{county.city}</TableCell>
@@ -778,7 +1148,127 @@ export function FloridaRegionalSalesMap({ data }: RegionalSalesMapProps) {
                 </Table>
               </div>
             )}
-          </div>
+
+            {/* Pagination Controls - Show when more than rowsPerPage */}
+            {sortedCounties.length > rowsPerPage && (
+              <div className="flex items-center justify-between mt-4 pt-3 border-t flex-shrink-0">
+                <div className="text-sm text-muted-foreground">
+                  Showing {(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, sortedCounties.length)} of {sortedCounties.length} results
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="h-8"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <div className="text-sm font-medium">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="h-8"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            </div>
+          )}
+
+          {/* ZIP Mode: Dealer List Table */}
+          {drawerMode === "zip" && (
+            <div className="mt-6 flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                <h3 className="text-sm font-semibold">
+                  Dealers in ZIP {selectedZip?.zip} ({zipDealers.length})
+                </h3>
+              </div>
+              {loadingZipData ? (
+                <div className="flex items-center justify-center py-12">
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading dealers...</span>
+                </div>
+              ) : zipDealers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-12 text-center">
+                  No dealer data available for this ZIP code
+                </p>
+              ) : (
+                <div className="flex-1 overflow-y-auto border rounded-lg">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableRow>
+                        <TableHead className="w-[200px]">Dealer Name</TableHead>
+                        <TableHead className="w-[140px]">City</TableHead>
+                        <TableHead className="w-[140px]">Sales Rep</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">Orders</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {zipDealers.map((dealer) => (
+                        <TableRow key={dealer.customer_id}>
+                          <TableCell className="font-medium">{dealer.dealer_name}</TableCell>
+                          <TableCell className="text-sm">{dealer.dealer_city}</TableCell>
+                          <TableCell className="text-sm">{dealer.sales_rep}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {fmtUSD0(dealer.revenue)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {dealer.order_count}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chat with Data Section - Shows for both modes */}
+          {drawerMode === "region" && selectedRegion && showChat && (
+            <div className="mt-6 flex-shrink-0 border-t pt-4">
+              <div
+                className={cn(
+                  "border rounded-lg p-4 transition-all duration-200",
+                  isFiltered ? "h-[200px]" : "h-[300px]"
+                )}
+              >
+                <DataChat
+                  seededQuestions={[
+                    {
+                      question: `What are the top cities in ${selectedRegion.region}?`,
+                      answer: `In ${selectedRegion.region}, the top performing cities are ${selectedRegion.counties
+                        .sort((a, b) => b.revenue - a.revenue)
+                        .slice(0, 3)
+                        .map(c => c.city)
+                        .join(", ")}. The region generated ${fmtUSD0(selectedRegion.revenue)} in total revenue.`
+                    },
+                    {
+                      question: "How many dealers are active?",
+                      answer: `There are ${selectedRegion.dealer_count} active dealers in ${selectedRegion.region}, generating ${selectedRegion.order_count} orders with total revenue of ${fmtUSD0(selectedRegion.revenue)}.`
+                    },
+                    {
+                      question: "Show me county performance",
+                      answer: `${selectedRegion.region} has ${Array.from(new Set(selectedRegion.counties.map(c => c.county))).length} counties. The top performing county is ${selectedRegion.counties.sort((a, b) => b.revenue - a.revenue)[0].county}.`
+                    },
+                  ]}
+                  placeholder={`Ask about ${selectedRegion.region} data...`}
+                  onClose={() => setShowChat(false)}
+                />
+              </div>
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </>

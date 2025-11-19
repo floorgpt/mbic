@@ -112,25 +112,42 @@ type SafeResult<T> = { data: T; _meta: PanelMeta };
 4. When env vars are missing, the helper layer is skipped entirely. A banner renders and `_meta.ok` is forced to `false` so every panel stays in sync.
 5. The UI reads `state.meta.ok` to decide whether to show the "Panel failed" badge while still displaying placeholders so the page stays responsive even when some RPCs fail.
 
-#### Florida ZIP Code Sales Map
+#### Florida Regional Sales Map
 
-The dashboard includes an interactive Leaflet-based choropleth map showing sales distribution across Florida ZIP codes:
+The dashboard includes an interactive Leaflet-based map showing sales distribution across Florida regions and ZIP codes:
 
-- **Visualization**: Green color gradient (light → dark) indicates sales intensity by ZIP code
-- **Interactivity**:
-  - Zoom/pan controls for exploring the state
-  - Click any ZIP to view popup with revenue, dealer count, and order count
-  - "View" button opens side drawer with detailed drill-down
-- **Drill-down drawer**:
-  - Shows cities within the ZIP code
-  - Lists all dealers with sales volume, order count, and assigned rep (with initials)
-  - Arrow button navigates to Sales page with dealer and rep pre-selected
-- **Data source**:
-  - Map visualization: `sales_by_zip_fl` RPC (983 Florida ZIP codes)
-  - Dealer details: `dealers_by_zip` RPC with city aggregation
-  - GeoJSON boundaries: US Census TIGER/Line 2010 ZCTA5 data (678KB, optimized with mapshaper)
-- **Component**: `components/dashboard/florida-zip-sales-map.tsx`
-- **API route**: `/api/dealers-by-zip` (fetches dealer list for selected ZIP)
+- **Regional View** (3 regions: North, Central, South Florida):
+  - Green color gradient (light → dark) indicates revenue intensity
+  - Hover tooltips show revenue, dealer count, and order count
+  - Click region polygon to open drawer with county breakdown
+  - Narrative summary highlights top-performing county with revenue percentage
+
+- **ZIP Code View**:
+  - Blue circles sized by revenue at accurate geographic coordinates (calculated from GeoJSON polygon centroids)
+  - Hover tooltips display city, ZIP, county, and sales metrics with visual CTA
+  - Click ZIP circle to open drawer with dealer-level details
+  - Toggle controls to show/hide regions and ZIP circles independently
+
+- **Interactive Features**:
+  - Sortable table columns (Revenue, Dealers, Orders) with ascending/descending indicators
+  - Column visibility dropdown to show/hide City, ZIP, County columns
+  - Responsive drawer with proper z-index layering and navigation (back button resets filters when navigating from ZIP to region mode)
+  - Dark mode support for tooltips
+  - AI-powered Chat POC with seeded Q&A, expand/collapse controls, and conversation reset
+
+- **Layout & Responsiveness**:
+  - Map uses flexbox layout (`flex-1 min-h-0`) to fill available vertical space in parent card
+  - Card container uses `flex flex-col` to ensure header and map stack correctly
+  - Matches height of adjacent "Team vs Targets" card with no empty white space
+  - Leaflet MapContainer inherits height via `h-full w-full` classes
+
+- **Data Sources**:
+  - Regional aggregation: `sales_by_county_fl` RPC (includes city names)
+  - ZIP dealer details: `dealers_by_zip_fl` RPC
+  - GeoJSON data: `florida-regions.geojson` (3 regions), `florida-zips.geojson` (ZIP polygons, 678KB)
+
+- **Component**: `components/dashboard/florida-regional-sales-map.tsx`
+- **Technical Details**: See `docs/florida-regional-map-architecture.md`
 
 You can reproduce the data snapshot locally with:
 

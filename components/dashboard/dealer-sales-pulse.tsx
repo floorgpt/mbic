@@ -167,6 +167,8 @@ export function DealerSalesPulse() {
   const [inactiveDealers, setInactiveDealers] = useState<InactiveDealer[]>([]);
   const [teamVsTargets, setTeamVsTargets] = useState<TeamVsTarget[]>([]);
   const [regionalSales, setRegionalSales] = useState<CountySalesRow[]>([]);
+  const [monthStart, setMonthStart] = useState<string>("");
+  const [monthEnd, setMonthEnd] = useState<string>("");
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 5;
@@ -253,15 +255,18 @@ export function DealerSalesPulse() {
 
       try {
         // Calculate month start and end dates
-        const monthStart = selectedMonth; // Already in YYYY-MM-DD format
+        const calcMonthStart = selectedMonth; // Already in YYYY-MM-DD format
         const parts = selectedMonth.split('-');
         const year = parseInt(parts[0]);
         const month = parseInt(parts[1]);
         const nextMonth = month === 12 ? 1 : month + 1;
         const nextYear = month === 12 ? year + 1 : year;
-        const monthEnd = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+        const calcMonthEnd = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
-        const result = await getSalesByCountyFlSafe(monthStart, monthEnd);
+        setMonthStart(calcMonthStart);
+        setMonthEnd(calcMonthEnd);
+
+        const result = await getSalesByCountyFlSafe(calcMonthStart, calcMonthEnd);
 
         if (result.data) {
           setRegionalSales(result.data);
@@ -630,8 +635,8 @@ export function DealerSalesPulse() {
             </div>
 
             {/* Child Chart 3 - Bottom Right - Sales Per Region */}
-            <div className="col-span-1 row-span-1 border border-gray-200 rounded-lg p-4 sm:p-6 min-h-[200px] lg:min-h-[300px] bg-white">
-              <div className="flex items-center justify-between mb-3">
+            <div className="col-span-1 row-span-1 border border-gray-200 rounded-lg p-4 sm:p-6 min-h-[200px] lg:min-h-[300px] bg-white flex flex-col">
+              <div className="flex items-center justify-between mb-3 flex-shrink-0">
                 <h3 className="text-sm font-semibold text-foreground">Sales Per Region (Florida)</h3>
                 {selectedMonth && (
                   <span className="text-xs text-muted-foreground">
@@ -640,16 +645,22 @@ export function DealerSalesPulse() {
                 )}
               </div>
               {!selectedMonth ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                   Select a month to view regional sales
                 </div>
               ) : regionalSales.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                   <LoadingSpinner size="sm" />
                   <span className="ml-2">Loading...</span>
                 </div>
               ) : (
-                <FloridaRegionalSalesMap data={regionalSales} />
+                <div key={selectedMonth} className="flex-1 min-h-0">
+                  <FloridaRegionalSalesMap
+                    data={regionalSales}
+                    fromDate={monthStart}
+                    toDate={monthEnd}
+                  />
+                </div>
               )}
             </div>
           </div>
