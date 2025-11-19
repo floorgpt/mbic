@@ -42,8 +42,9 @@ import {
   ReferenceLine,
   Cell,
 } from "recharts";
-import { getDealerEngagementSafe } from "@/lib/mbic-supabase";
-import type { DealerEngagementRow } from "@/lib/mbic-supabase";
+import { getDealerEngagementSafe, getSalesByCountyFlSafe } from "@/lib/mbic-supabase";
+import type { DealerEngagementRow, CountySalesRow } from "@/lib/mbic-supabase";
+import { FloridaRegionalSalesMap } from "./florida-regional-sales-map";
 import { TrendingUp, TrendingDown, Eye, Download, ChevronLeft, ChevronRight, MoreVertical, ArrowUpDown, Filter } from "lucide-react";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "@/components/ui/date-range-picker";
@@ -165,6 +166,7 @@ export function DealerSalesPulse() {
   const [activeDealers, setActiveDealers] = useState<ActiveDealer[]>([]);
   const [inactiveDealers, setInactiveDealers] = useState<InactiveDealer[]>([]);
   const [teamVsTargets, setTeamVsTargets] = useState<TeamVsTarget[]>([]);
+  const [regionalSales, setRegionalSales] = useState<CountySalesRow[]>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 5;
@@ -240,6 +242,38 @@ export function DealerSalesPulse() {
 
     fetchDealerActivity();
   }, [dateRange]);
+
+  // Fetch regional sales data when selected month changes
+  useEffect(() => {
+    async function fetchRegionalSales() {
+      if (!selectedMonth) {
+        setRegionalSales([]);
+        return;
+      }
+
+      try {
+        // Calculate month start and end dates
+        const monthStart = selectedMonth; // Already in YYYY-MM-DD format
+        const parts = selectedMonth.split('-');
+        const year = parseInt(parts[0]);
+        const month = parseInt(parts[1]);
+        const nextMonth = month === 12 ? 1 : month + 1;
+        const nextYear = month === 12 ? year + 1 : year;
+        const monthEnd = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+        const result = await getSalesByCountyFlSafe(monthStart, monthEnd);
+
+        if (result.data) {
+          setRegionalSales(result.data);
+        }
+      } catch (error) {
+        console.error("Error fetching regional sales:", error);
+        setRegionalSales([]);
+      }
+    }
+
+    fetchRegionalSales();
+  }, [selectedMonth]);
 
   const handleBarClick = (data: DealerActivityData) => {
     setSelectedMonth(data.month);
@@ -596,12 +630,27 @@ export function DealerSalesPulse() {
             </div>
 
             {/* Child Chart 3 - Bottom Right - Sales Per Region */}
-            <div className="col-span-1 row-span-1 border border-dashed border-gray-300 rounded-lg p-4 sm:p-6 flex items-center justify-center min-h-[200px] lg:min-h-[300px]">
-              <div className="text-center text-gray-500">
-                <TrendingDown className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm font-medium">Sales Per Region (Florida)</p>
-                <p className="text-xs mt-1 text-gray-400">Coming in Phase 7</p>
+            <div className="col-span-1 row-span-1 border border-gray-200 rounded-lg p-4 sm:p-6 min-h-[200px] lg:min-h-[300px] bg-white">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-foreground">Sales Per Region (Florida)</h3>
+                {selectedMonth && (
+                  <span className="text-xs text-muted-foreground">
+                    {formatMonth(selectedMonth)}
+                  </span>
+                )}
               </div>
+              {!selectedMonth ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Select a month to view regional sales
+                </div>
+              ) : regionalSales.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2">Loading...</span>
+                </div>
+              ) : (
+                <FloridaRegionalSalesMap data={regionalSales} />
+              )}
             </div>
           </div>
         </CardContent>
