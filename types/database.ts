@@ -30,8 +30,13 @@ export type CustomersDemoRow = {
 export type SalesRepRow = {
   rep_id: number;
   rep_name: string;
-  email: string | null;
+  rep_email: string | null;
   rep_phone: string | null;
+  rep_profile_picture: string | null;
+  rep_initials: string | null;
+  salesrep_last_name: string | null;
+  salesrep_first_name: string | null;
+  created_at?: string;
 };
 
 export type ProductCategoryRow = {
@@ -139,6 +144,44 @@ export type MbicSettingInsert = {
   updated_at?: string | null;
 };
 
+export type SalesTargetRow = {
+  id: number;
+  rep_id: number;
+  target_month: string;
+  target_amount: number;
+  fiscal_year: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type SalesTargetInsert = {
+  id?: number;
+  rep_id: number;
+  target_month: string;
+  target_amount: number;
+  fiscal_year?: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CustomerRepTransferRow = {
+  id: number;
+  customer_id: number;
+  from_rep_id: number | null;
+  to_rep_id: number | null;
+  transferred_at: string;
+  notes: string | null;
+};
+
+export type CustomerRepTransferInsert = {
+  id?: number;
+  customer_id: number;
+  from_rep_id?: number | null;
+  to_rep_id?: number | null;
+  transferred_at?: string;
+  notes?: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -158,6 +201,18 @@ export type Database = {
         Row: SalesRepRow;
         Insert: SalesRepRow;
         Update: Partial<SalesRepRow>;
+        Relationships: [];
+      };
+      sales_targets: {
+        Row: SalesTargetRow;
+        Insert: SalesTargetInsert;
+        Update: Partial<SalesTargetInsert>;
+        Relationships: [];
+      };
+      customer_rep_transfers: {
+        Row: CustomerRepTransferRow;
+        Insert: CustomerRepTransferInsert;
+        Update: Partial<CustomerRepTransferInsert>;
         Relationships: [];
       };
       product_categories: {

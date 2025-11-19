@@ -62,7 +62,7 @@ export async function PATCH(request: Request) {
           target_month,
           target_amount: parseFloat(target_amount),
           fiscal_year: parseInt(target_month.split("-")[0]),
-        },
+        } as never,
         { onConflict: "rep_id,target_month" }
       )
       .select()
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from("sales_targets")
-      .upsert(preparedTargets, { onConflict: "rep_id,target_month" })
+      .upsert(preparedTargets as never, { onConflict: "rep_id,target_month" })
       .select();
 
     if (error) {

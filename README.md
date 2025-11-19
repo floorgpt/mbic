@@ -187,6 +187,32 @@ The Sales page uses enriched helper functions because it needs per-rep drill dow
 
 All Sales helpers sit in `lib/mbic-sales.ts` / `lib/db/sales.ts` because they touch additional SQL views. They continue to share the same `getSupabaseAdminClient` factory and numeric coercion utilities to avoid drift.
 
+### Sales Hub Settings (`app/(dashboard)/settings/page.tsx`)
+
+The Settings page provides comprehensive management for sales representatives, monthly targets, and customer assignments:
+
+- **Sales Representatives**: Add/edit sales reps with profile pictures, email, and phone. Profile pictures are stored as base64-encoded images in `sales_reps_demo.rep_profile_picture`.
+- **Monthly Sales Targets**: Set individual targets per rep per month with CSV import/export. Targets default to $200K per month. UI excludes "Dismissed" and "Intercompany" reps from the targets view.
+- **Customer Management**: Comprehensive customer assignment system with:
+  - Search autocomplete for quick customer lookup
+  - Customer editing (dealer name, rep assignment, city, state, zip, country, email)
+  - Transfer history tracking in `customer_rep_transfers` table (logs every rep_id change with timestamp)
+  - CSV bulk import with professional 3-step dialog (download template → edit → upload)
+  - Summary statistics: Total Customers, Assigned (excluding Dismissed/Intercompany), Dismissed, Unassigned
+  - Matches the same dealer counting logic as the Dashboard's Dealer Activity chart (`rep_id not in (14, 15)`)
+
+All Settings components are client-side React with API routes:
+- `/api/sales-hub/reps` - CRUD for sales reps
+- `/api/sales-hub/targets` - CRUD for monthly targets
+- `/api/sales-hub/customers` - CRUD for customers with transfer tracking
+- `/api/sales-hub/customers/[id]/history` - Fetch transfer history with rep details
+
+Database tables:
+- `sales_reps_demo` - Rep profiles with optional profile_picture, email, phone
+- `sales_targets` - Monthly targets (rep_id, target_month YYYY-MM, target_amount, fiscal_year)
+- `customers_demo` - Dealer accounts with rep assignments and billing address fields
+- `customer_rep_transfers` - Audit log for rep reassignments (customer_id, from_rep_id, to_rep_id, transferred_at, notes)
+
 ### Sales Operations (`app/(dashboard)/sales-ops/page.tsx`)
 
 The Sales Ops overview mirrors the guardrails used by the main dashboard: `dynamic = 'force-dynamic'`, Node runtime, and `Promise.allSettled` with a `[salesops-panels]` log that emits `{ ok, count, err? }` for every panel render. Data access lives in `lib/mbic-supabase-salesops.ts`, which exposes typed safe helpers that wrap `tryServerSafe` and normalise Supabase RPC output.
