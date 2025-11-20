@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { CountySalesRow, ZipDealerRow } from "@/lib/mbic-supabase";
 import { getDealersByZipFlSafe } from "@/lib/mbic-supabase";
 import { fmtUSD0 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
+import { motion } from "framer-motion";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import {
   Sheet,
@@ -402,6 +403,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
         setSelectedRegion(summary);
         setDrawerMode("region");
         setSheetOpen(true);
+        console.log("[FloridaRegionalSalesMap] Sheet opened for region");
       });
 
       // Hover effects
@@ -600,6 +602,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
               eventHandlers={{
                 click: async () => {
                   console.log("[FloridaRegionalSalesMap] ZIP clicked:", zipData.zip, zipData.city);
+
                   // Fetch dealer data for this ZIP and switch to ZIP mode
                   setLoadingZipData(true);
                   setSelectedZip(zipData);
@@ -612,6 +615,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
 
                   setDrawerMode("zip");
                   setSheetOpen(true);
+                  console.log("[FloridaRegionalSalesMap] Sheet opened for ZIP", zipData.zip);
 
                   const result = await getDealersByZipFlSafe(zipData.zip, fromDate, toDate);
                   setZipDealers(result.data || []);
@@ -678,9 +682,10 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
 
       {/* County Breakdown Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl md:max-w-3xl flex flex-col z-50 px-6 relative">
+        <SheetContent className="w-full sm:max-w-2xl md:max-w-3xl flex flex-col overflow-hidden">
           <SheetHeader className="space-y-3 flex-shrink-0 pb-4">
             <div className="flex items-center justify-between gap-2">
+              {/* Left: Back Button (ZIP mode) + Title */}
               <div className="flex items-center gap-2">
                 {drawerMode === "zip" && (
                   <Button
@@ -702,20 +707,32 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
                     : `${selectedZip?.city}, FL ${selectedZip?.zip}`}
                 </SheetTitle>
               </div>
-              {drawerMode === "region" && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 group"
-                  onClick={() => setIsChatOpen(!isChatOpen)}
-                  title="Chat with AI"
-                >
-                  <Sparkles className={cn(
-                    "h-4 w-4 transition-colors",
-                    isChatOpen ? "text-primary" : "text-muted-foreground group-hover:text-primary"
-                  )} />
-                </Button>
-              )}
+
+              {/* Right: AI Button + Close Button (properly grouped with spacing) */}
+              <div className="flex items-center gap-4">
+                {drawerMode === "region" && (
+                  <motion.button
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center",
+                      "bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50",
+                      "dark:from-indigo-950/50 dark:via-purple-950/50 dark:to-pink-950/50",
+                      "border border-white/50 dark:border-white/10",
+                      "shadow-sm hover:shadow-md",
+                      "transition-shadow duration-200",
+                      isChatOpen && "ring-2 ring-indigo-400/50"
+                    )}
+                    whileHover={{ scale: 1.05, rotate: 5 }}
+                    whileTap={{ scale: 0.95 }}
+                    title="Analyze Region with AI"
+                  >
+                    <Sparkles className={cn(
+                      "h-5 w-5 transition-colors",
+                      isChatOpen ? "text-indigo-600 dark:text-indigo-400" : "text-indigo-500 dark:text-indigo-400"
+                    )} />
+                  </motion.button>
+                )}
+              </div>
             </div>
             <SheetDescription asChild>
               <div className="space-y-3">
