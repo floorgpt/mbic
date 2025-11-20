@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Layers, Circle, ArrowUpDown, ArrowUp, ArrowDown, Eye, ArrowLeft, Filter, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Layers, Circle, ArrowUpDown, ArrowUp, ArrowDown, Eye, ArrowLeft, Filter, ChevronLeft, ChevronRight, Search, Sparkles } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -33,7 +33,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DataChat } from "@/components/ui/data-chat";
+import { ChatSheet } from "@/components/ui/chat-sheet";
+import { FloatingNudge } from "@/components/ui/floating-nudge";
 import {
   Popover,
   PopoverContent,
@@ -124,6 +125,8 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
   const [citySearchQuery, setCitySearchQuery] = useState("");
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatInitialQuery, setChatInitialQuery] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setIsMounted(true);
@@ -653,28 +656,44 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
 
       {/* County Breakdown Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl md:max-w-3xl flex flex-col z-50 px-6">
+        <SheetContent className="w-full sm:max-w-2xl md:max-w-3xl flex flex-col z-50 px-6 relative">
           <SheetHeader className="space-y-3 flex-shrink-0 pb-4">
-            <div className="flex items-center gap-2">
-              {drawerMode === "zip" && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {drawerMode === "zip" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setDrawerMode("region");
+                      setCityFilter([]);
+                      setCountyFilter([]);
+                    }}
+                    className="h-8"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                )}
+                <SheetTitle className="text-lg font-semibold">
+                  {drawerMode === "region"
+                    ? selectedRegion?.region
+                    : `${selectedZip?.city}, FL ${selectedZip?.zip}`}
+                </SheetTitle>
+              </div>
+              {drawerMode === "region" && (
                 <Button
                   variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setDrawerMode("region");
-                    setCityFilter([]);
-                    setCountyFilter([]);
-                  }}
-                  className="h-8"
+                  size="icon"
+                  className="h-8 w-8 group"
+                  onClick={() => setIsChatOpen(!isChatOpen)}
+                  title="Chat with AI"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <Sparkles className={cn(
+                    "h-4 w-4 transition-colors",
+                    isChatOpen ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+                  )} />
                 </Button>
               )}
-              <SheetTitle className="text-lg font-semibold">
-                {drawerMode === "region"
-                  ? selectedRegion?.region
-                  : `${selectedZip?.city}, FL ${selectedZip?.zip}`}
-              </SheetTitle>
             </div>
             <SheetDescription asChild>
               <div className="space-y-3">
@@ -1234,39 +1253,50 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
             </div>
           )}
 
-          {/* Chat with Data Section - Shows for region mode */}
+          {/* Floating Nudge - Shows when chat is closed and high-value insight detected */}
+          {drawerMode === "region" && selectedRegion && !isChatOpen && (
+            <FloatingNudge
+              isVisible={sortedCounties.length > 0 && sortedCounties[0].revenue > 50000}
+              text={`✨ Analyze ${sortedCounties[0]?.city}'s performance?`}
+              onClick={() => {
+                setChatInitialQuery(`Why is ${sortedCounties[0]?.city} performing so well in ${selectedRegion.region}?`);
+                setIsChatOpen(true);
+              }}
+              className="absolute bottom-6 left-1/2 -translate-x-1/2"
+            />
+          )}
+
+          {/* ChatSheet Overlay - Slides up from bottom */}
           {drawerMode === "region" && selectedRegion && (
-            <div className="mt-6 flex-shrink-0 border-t pt-4">
-              <div
-                className={cn(
-                  "border rounded-lg p-4 transition-all duration-200",
-                  isFiltered ? "h-[200px]" : "h-[300px]"
-                )}
-              >
-                <DataChat
-                  seededQuestions={[
-                    {
-                      question: `What are the top cities in ${selectedRegion.region}?`,
-                      answer: `In ${selectedRegion.region}, the top performing cities are ${selectedRegion.counties
-                        .sort((a, b) => b.revenue - a.revenue)
-                        .slice(0, 3)
-                        .map(c => c.city)
-                        .join(", ")}. The region generated ${fmtUSD0(selectedRegion.revenue)} in total revenue.`
-                    },
-                    {
-                      question: "How many dealers are active?",
-                      answer: `There are ${selectedRegion.dealer_count} active dealers in ${selectedRegion.region}, generating ${selectedRegion.order_count} orders with total revenue of ${fmtUSD0(selectedRegion.revenue)}.`
-                    },
-                    {
-                      question: "Show me county performance",
-                      answer: `${selectedRegion.region} has ${Array.from(new Set(selectedRegion.counties.map(c => c.county))).length} counties. The top performing county is ${selectedRegion.counties.sort((a, b) => b.revenue - a.revenue)[0].county}.`
-                    },
-                  ]}
-                  placeholder={`Ask about ${selectedRegion.region} data...`}
-                  title={`Chat about ${selectedRegion.region}`}
-                />
-              </div>
-            </div>
+            <ChatSheet
+              isOpen={isChatOpen}
+              onClose={() => setIsChatOpen(false)}
+              seededQuestions={[
+                {
+                  question: `What are the top cities in ${selectedRegion.region}?`,
+                  answer: `In ${selectedRegion.region}, the top performing cities are ${selectedRegion.counties
+                    .sort((a, b) => b.revenue - a.revenue)
+                    .slice(0, 3)
+                    .map(c => c.city)
+                    .join(", ")}. The region generated ${fmtUSD0(selectedRegion.revenue)} in total revenue.`
+                },
+                {
+                  question: "How many dealers are active?",
+                  answer: `There are ${selectedRegion.dealer_count} active dealers in ${selectedRegion.region}, generating ${selectedRegion.order_count} orders with total revenue of ${fmtUSD0(selectedRegion.revenue)}.`
+                },
+                {
+                  question: "Show me county performance",
+                  answer: `${selectedRegion.region} has ${Array.from(new Set(selectedRegion.counties.map(c => c.county))).length} counties. The top performing county is ${selectedRegion.counties.sort((a, b) => b.revenue - a.revenue)[0].county}.`
+                },
+                {
+                  question: `Why is ${sortedCounties[0]?.city} performing so well in ${selectedRegion.region}?`,
+                  answer: `${sortedCounties[0]?.city} is the top performer with ${fmtUSD0(sortedCounties[0]?.revenue)} in revenue. This represents a strong market presence with ${sortedCounties[0]?.dealer_count} active dealers and ${sortedCounties[0]?.order_count} orders.`
+                },
+              ]}
+              placeholder={`Ask about ${selectedRegion.region} data...`}
+              title={`Chat about ${selectedRegion.region}`}
+              initialQuery={chatInitialQuery}
+            />
           )}
         </SheetContent>
       </Sheet>
