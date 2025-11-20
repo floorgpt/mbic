@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Layers, Circle, ArrowUpDown, ArrowUp, ArrowDown, Eye, EyeOff, ArrowLeft, Filter, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Layers, Circle, ArrowUpDown, ArrowUp, ArrowDown, Eye, ArrowLeft, Filter, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -124,7 +124,6 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
   const [citySearchQuery, setCitySearchQuery] = useState("");
-  const [showChat, setShowChat] = useState(true);
 
   useEffect(() => {
     setIsMounted(true);
@@ -1235,8 +1234,8 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
             </div>
           )}
 
-          {/* Chat with Data Section - Shows for both modes */}
-          {drawerMode === "region" && selectedRegion && showChat && (
+          {/* Chat with Data Section - Shows for region mode */}
+          {drawerMode === "region" && selectedRegion && (
             <div className="mt-6 flex-shrink-0 border-t pt-4">
               <div
                 className={cn(
@@ -1264,7 +1263,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
                     },
                   ]}
                   placeholder={`Ask about ${selectedRegion.region} data...`}
-                  onClose={() => setShowChat(false)}
+                  title={`Chat about ${selectedRegion.region}`}
                 />
               </div>
             </div>
