@@ -759,3 +759,44 @@ export async function getSalesByCountyFlSafe(
     _meta: { ...safe._meta, count: mapped.length },
   };
 }
+
+export type ZipDealerRow = {
+  customer_id: string;
+  dealer_name: string;
+  dealer_city: string;
+  dealer_zip: string;
+  revenue: number;
+  order_count: number;
+  sales_rep: string;
+};
+
+export async function getDealersByZipFlSafe(
+  zipCode: string,
+  from: DateISO,
+  to: DateISO,
+): Promise<SafeResult<ZipDealerRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("dealers_by_zip_fl", {
+      p_zip_code: zipCode,
+      from_date: from,
+      to_date: to,
+    }),
+    "dealers_by_zip_fl",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => ({
+    customer_id: typeof row.customer_id === "string" ? row.customer_id : "",
+    dealer_name: typeof row.dealer_name === "string" ? row.dealer_name : "Unknown",
+    dealer_city: typeof row.dealer_city === "string" ? row.dealer_city : "Unknown",
+    dealer_zip: typeof row.dealer_zip === "string" ? row.dealer_zip : "",
+    revenue: asNumber(row.revenue, 0),
+    order_count: asNumber(row.order_count, 0),
+    sales_rep: typeof row.sales_rep === "string" ? row.sales_rep : "Unassigned",
+  }));
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}
