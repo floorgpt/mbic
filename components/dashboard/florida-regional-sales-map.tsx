@@ -33,8 +33,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChatSheet } from "@/components/ui/chat-sheet";
-import { FloatingNudge } from "@/components/ui/floating-nudge";
 import {
   Popover,
   PopoverContent,
@@ -64,6 +62,16 @@ const Popup = dynamic(
 );
 const Tooltip = dynamic(
   () => import("react-leaflet").then((mod) => mod.Tooltip),
+  { ssr: false }
+);
+
+// Dynamically import components with framer-motion to avoid SSR issues
+const ChatSheet = dynamic(
+  () => import("@/components/ui/chat-sheet").then((mod) => ({ default: mod.ChatSheet })),
+  { ssr: false }
+);
+const FloatingNudge = dynamic(
+  () => import("@/components/ui/floating-nudge").then((mod) => ({ default: mod.FloatingNudge })),
   { ssr: false }
 );
 
