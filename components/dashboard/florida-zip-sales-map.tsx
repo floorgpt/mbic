@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ZipSalesRow, DealerByZipRow } from "@/lib/mbic-supabase";
 import { fmtUSD0 } from "@/lib/format";
-import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Layers, Circle } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import {
@@ -29,6 +29,14 @@ const TileLayer = dynamic(
   () => import("react-leaflet").then((mod) => mod.TileLayer),
   { ssr: false }
 );
+const CircleMarker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.CircleMarker),
+  { ssr: false }
+);
+const Tooltip = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Tooltip),
+  { ssr: false }
+);
 
 type FloridaZipSalesMapProps = {
   data: ZipSalesRow[];
@@ -48,6 +56,11 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 5;
+
+  // Blue circles state
+  const [zipCentroids, setZipCentroids] = useState<Map<string, { lat: number; lng: number }>>(new Map());
+  const [showPolygons, setShowPolygons] = useState(true);
+  const [showCircles, setShowCircles] = useState(true);
 
   useEffect(() => {
     setIsMounted(true);
@@ -176,10 +189,17 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
     };
   };
 
-  // Tooltip on hover with eye icon
+  // Tooltip on hover with eye icon AND calculate centroids
   const onEachFeature = (feature: Feature<Geometry>, layer: L.Layer) => {
     const zipCode = String(feature.id ?? "");
     const zipData = revenueByZip.get(zipCode);
+
+    // Calculate centroid from polygon bounds (for blue circles)
+    if (layer instanceof L.Polygon || layer instanceof L.MultiPolygon) {
+      const bounds = layer.getBounds();
+      const center = bounds.getCenter();
+      setZipCentroids(prev => new Map(prev).set(zipCode, { lat: center.lat, lng: center.lng }));
+    }
 
     if (zipData) {
       const popupContent = L.DomUtil.create("div");
@@ -241,9 +261,40 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
 
   const zipSalesData = selectedZip ? revenueByZip.get(selectedZip) : null;
 
+  // Circle radius calculation (based on revenue)
+  const getCircleRadius = (revenue: number): number => {
+    if (revenue === 0) return 0;
+    const minRadius = 4;
+    const maxRadius = 18;
+    const ratio = (revenue - minRevenue) / (maxRevenue - minRevenue);
+    return minRadius + ratio * (maxRadius - minRadius);
+  };
+
   return (
     <>
-      <div className="h-[600px] w-full">
+      <div className="h-[600px] w-full relative">
+        {/* Toggle Controls */}
+        <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+          <Button
+            variant={showPolygons ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowPolygons(!showPolygons)}
+            className="shadow-lg"
+          >
+            <Layers className="h-4 w-4 mr-2" />
+            Polygons
+          </Button>
+          <Button
+            variant={showCircles ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowCircles(!showCircles)}
+            className="shadow-lg"
+          >
+            <Circle className="h-4 w-4 mr-2" />
+            Circles
+          </Button>
+        </div>
+
         <MapContainer
           center={floridaCenter}
           zoom={7}
@@ -254,11 +305,88 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
-          <GeoJSON
-            data={geoData}
-            style={style}
-            onEachFeature={onEachFeature}
-          />
+
+          {/* ZIP Polygons (Choropleth) */}
+          {showPolygons && (
+            <GeoJSON
+              data={geoData}
+              style={style}
+              onEachFeature={onEachFeature}
+            />
+          )}
+
+          {/* Blue Circles at Centroids */}
+          {showCircles && data.map((zipData) => {
+            const centroid = zipCentroids.get(zipData.zip_code);
+            if (!centroid || zipData.revenue === 0) return null;
+
+            return (
+              <CircleMarker
+                key={zipData.zip_code}
+                center={[centroid.lat, centroid.lng]}
+                radius={getCircleRadius(zipData.revenue)}
+                pathOptions={{
+                  fillColor: "#3b82f6", // blue-500
+                  fillOpacity: 0.6,
+                  color: "#1e40af", // blue-800
+                  weight: 2,
+                }}
+                eventHandlers={{
+                  click: () => handleViewDetails(zipData.zip_code),
+                  mouseover: (e) => {
+                    e.target.setStyle({
+                      fillOpacity: 0.8,
+                      weight: 3,
+                    });
+                  },
+                  mouseout: (e) => {
+                    e.target.setStyle({
+                      fillOpacity: 0.6,
+                      weight: 2,
+                    });
+                  },
+                }}
+              >
+                <Tooltip
+                  sticky
+                  className="regional-tooltip"
+                  interactive={false}
+                >
+                  <div style={{ fontFamily: "sans-serif", minWidth: "180px", padding: "8px" }}>
+                    <p style={{ fontWeight: 600, marginBottom: "8px", fontSize: "14px" }}>
+                      ZIP: {zipData.zip_code}
+                    </p>
+                    <p style={{ margin: "4px 0", fontSize: "12px" }}>
+                      <span style={{ color: "#6b7280" }}>Revenue:</span> <strong>{fmtUSD0(zipData.revenue)}</strong>
+                    </p>
+                    <p style={{ margin: "4px 0", fontSize: "12px" }}>
+                      <span style={{ color: "#6b7280" }}>Dealers:</span> <strong>{zipData.dealer_count}</strong>
+                    </p>
+                    <p style={{ margin: "4px 0", fontSize: "12px" }}>
+                      <span style={{ color: "#6b7280" }}>Orders:</span> <strong>{zipData.order_count}</strong>
+                    </p>
+                    <div style={{
+                      marginTop: "8px",
+                      paddingTop: "8px",
+                      borderTop: "1px solid #e5e7eb",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      color: "#22c55e",
+                      fontSize: "11px",
+                      fontWeight: 600
+                    }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      Click to view dealers
+                    </div>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
         </MapContainer>
 
         {/* Legend */}
