@@ -393,6 +393,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
       layer.bindTooltip(popupContent, {
         sticky: true,
         className: "regional-tooltip",
+        interactive: false,
       });
 
       // Click to open sheet with county breakdown
@@ -633,6 +634,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
               <Tooltip
                 sticky
                 className="regional-tooltip"
+                interactive={false}
               >
                 <div style={{ fontFamily: "sans-serif", minWidth: "180px", padding: "8px" }}>
                   <p style={{ fontWeight: 600, marginBottom: "8px", fontSize: "14px" }}>
