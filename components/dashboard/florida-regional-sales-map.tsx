@@ -169,6 +169,16 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
     setCurrentPage(1);
   }, [cityFilter, countyFilter]);
 
+  // Debug: Log sheet state changes
+  useEffect(() => {
+    console.log("[FloridaRegionalSalesMap] Sheet state changed:", {
+      sheetOpen,
+      drawerMode,
+      hasSelectedRegion: !!selectedRegion,
+      hasSelectedZip: !!selectedZip,
+    });
+  }, [sheetOpen, drawerMode, selectedRegion, selectedZip]);
+
   // Calculate centroid from polygon coordinates
   const calculateCentroid = (coordinates: number[][][]): [number, number] | null => {
     try {
@@ -379,6 +389,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
 
       // Click to open sheet with county breakdown
       layer.on("click", () => {
+        console.log("[FloridaRegionalSalesMap] Region clicked:", summary.region);
         setSelectedRegion(summary);
         setDrawerMode("region");
         setSheetOpen(true);
@@ -579,6 +590,7 @@ export function FloridaRegionalSalesMap({ data, fromDate, toDate }: RegionalSale
               }}
               eventHandlers={{
                 click: async () => {
+                  console.log("[FloridaRegionalSalesMap] ZIP clicked:", zipData.zip, zipData.city);
                   // Fetch dealer data for this ZIP and switch to ZIP mode
                   setLoadingZipData(true);
                   setSelectedZip(zipData);
