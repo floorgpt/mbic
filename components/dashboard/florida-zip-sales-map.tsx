@@ -96,13 +96,13 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
     const loadGapData = async () => {
       try {
         const result = await getZipGapAnalysisSafe(dateRange.from, dateRange.to);
-        if (!result._meta.error) {
+        if (!result._meta.err) {
           setGapData(result.data);
           console.log("[FloridaZipSalesMap] Gap data loaded:", {
             gapCount: result.data.length,
           });
         } else {
-          console.error("[FloridaZipSalesMap] Gap data error:", result._meta.error);
+          console.error("[FloridaZipSalesMap] Gap data error:", result._meta.err);
         }
       } catch (err) {
         console.error("[FloridaZipSalesMap] Failed to load gap data:", err);
