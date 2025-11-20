@@ -227,7 +227,8 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
     const zipData = revenueByZip.get(zipCode);
 
     // Calculate centroid from polygon bounds (for blue circles)
-    if (layer instanceof L.Polygon || layer instanceof L.MultiPolygon) {
+    // Note: MultiPolygon extends Polygon, so this check covers both
+    if (layer instanceof L.Polygon) {
       const bounds = layer.getBounds();
       const center = bounds.getCenter();
       setZipCentroids(prev => new Map(prev).set(zipCode, { lat: center.lat, lng: center.lng }));
