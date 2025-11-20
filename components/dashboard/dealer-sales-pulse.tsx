@@ -230,9 +230,11 @@ export function DealerSalesPulse() {
 
           setDealerActivityData(chartData);
 
-          // Auto-select the most recent month
+          // Auto-select the most recent month with data
           if (chartData.length > 0) {
-            setSelectedMonth(chartData[chartData.length - 1].month);
+            const mostRecentMonth = chartData[chartData.length - 1].month;
+            console.log("[DealerSalesPulse] Auto-selecting most recent month:", mostRecentMonth);
+            setSelectedMonth(mostRecentMonth);
           }
         }
       } catch (error) {
@@ -249,9 +251,12 @@ export function DealerSalesPulse() {
   useEffect(() => {
     async function fetchRegionalSales() {
       if (!selectedMonth) {
+        console.log("[DealerSalesPulse] No month selected, skipping regional sales fetch");
         setRegionalSales([]);
         return;
       }
+
+      console.log("[DealerSalesPulse] Fetching regional sales for month:", selectedMonth);
 
       try {
         // Calculate month start and end dates
@@ -269,10 +274,13 @@ export function DealerSalesPulse() {
         const result = await getSalesByCountyFlSafe(calcMonthStart, calcMonthEnd);
 
         if (result.data) {
+          console.log("[DealerSalesPulse] Regional sales data loaded:", result.data.length, "rows");
           setRegionalSales(result.data);
+        } else {
+          console.log("[DealerSalesPulse] No regional sales data returned");
         }
       } catch (error) {
-        console.error("Error fetching regional sales:", error);
+        console.error("[DealerSalesPulse] Error fetching regional sales:", error);
         setRegionalSales([]);
       }
     }
