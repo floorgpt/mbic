@@ -47,8 +47,8 @@ export function useZipGapData(zipCode: string | null) {
       try {
         const result = await getZipOpportunityDetailsSafe(zipCode);
 
-        if (result._meta.error) {
-          setError(result._meta.error);
+        if (result._meta.err) {
+          setError(result._meta.err);
           setData([]);
         } else {
           setData(result.data);
