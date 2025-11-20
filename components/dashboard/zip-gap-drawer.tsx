@@ -288,18 +288,14 @@ export function ZipGapDrawer({ isOpen, onClose, zipCode, dateRange }: ZipGapDraw
           </div>
 
           {/* Floating Nudge */}
-          <AnimatePresence>
-            {showNudge && !isChatOpen && !loading && data.length > 0 && (
-              <FloatingNudge
-                message="💡 Ask me about expansion strategies for this gap"
-                onDismiss={() => setShowNudge(false)}
-                onClick={() => {
-                  setIsChatOpen(true);
-                  setShowNudge(false);
-                }}
-              />
-            )}
-          </AnimatePresence>
+          <FloatingNudge
+            isVisible={showNudge && !isChatOpen && !loading && data.length > 0}
+            text="💡 Ask me about expansion strategies for this gap"
+            onClick={() => {
+              setIsChatOpen(true);
+              setShowNudge(false);
+            }}
+          />
         </SheetContent>
       </Sheet>
 
