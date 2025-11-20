@@ -60,6 +60,8 @@ npm run build
 - **[docs/mbic-supabase-integration.md](docs/mbic-supabase-integration.md)** - Data integration details
 - **[docs/sales-ops-migration-guide.md](docs/sales-ops-migration-guide.md)** - Detailed migration steps
 - **[docs/supabase-postgrest-limit-issue.md](docs/supabase-postgrest-limit-issue.md)** - PostgREST limitations
+- **[docs/edge-function-sync-market-data.md](docs/edge-function-sync-market-data.md)** - Gap Analysis Edge Function guide
+- **[docs/gap-analysis-deployment-status.md](docs/gap-analysis-deployment-status.md)** - Gap Analysis implementation status
 
 ## Development Notes
 
@@ -90,6 +92,8 @@ The following RPCs are executed for every dashboard render (and the `/api/diag` 
 | `sales_org_dealer_engagement_trailing_v3` | `from_date`, `to_date` | Monthly assigned vs. active dealers. | Sorted chronologically in the component before rendering. |
 | `sales_by_zip_fl` | `from_date`, `to_date`, `p_category`, `p_collection` | ZIP code aggregations for Florida. | Returns `[{ zip_code, revenue, dealer_count, order_count }]` with optional category/collection filters. |
 | `dealers_by_zip` | `p_zip_code`, `from_date`, `to_date` | Dealer drill-down for specific ZIP. | Returns dealers in ZIP with sales metrics, rep assignments, and city names for map drawer. |
+| `get_zip_gap_analysis` | `from_date`, `to_date` | Gap analysis aggregation. | Returns ZIPs with competitor presence but zero sales: `[{ zip_code, total_est_revenue, competitor_count }]`. |
+| `get_zip_opportunity_details` | `p_zip_code` | Competitor details for gap. | Returns competitor stores in ZIP: `[{ store_name, store_type, city, est_annual_revenue, latitude, longitude }]`. |
 
 All helpers return a `SafeResult<T>` object:
 
@@ -128,6 +132,14 @@ The dashboard includes an interactive Leaflet-based map showing sales distributi
   - Click ZIP circle to open drawer with dealer-level details
   - Toggle controls to show/hide regions and ZIP circles independently
 
+- **Gap Analysis** (NEW):
+  - Red circles indicate market gaps: ZIPs with competitor presence but zero sales
+  - Revenue estimates based on competitor store types (Home Depot $45M, Lowe's $35M, Floor & Decor $20M base)
+  - Tier multipliers: 1.25× for high-volume cities, 0.9× for regular markets
+  - Click red circle to open Gap Drawer with competitor intelligence and recommended actions
+  - AI chat assistant with seeded Q&A for gap-specific insights
+  - Data synced from OpenStreetMap via Edge Function `sync-market-data`
+
 - **Interactive Features**:
   - Sortable table columns (Revenue, Dealers, Orders) with ascending/descending indicators
   - Column visibility dropdown to show/hide City, ZIP, County columns
@@ -144,6 +156,8 @@ The dashboard includes an interactive Leaflet-based map showing sales distributi
 - **Data Sources**:
   - Regional aggregation: `sales_by_county_fl` RPC (includes city names)
   - ZIP dealer details: `dealers_by_zip_fl` RPC
+  - Gap analysis: `get_zip_gap_analysis` and `get_zip_opportunity_details` RPCs
+  - Competitor data: `competitors_market_data` table (synced via `sync-market-data` Edge Function)
   - GeoJSON data: `florida-regions.geojson` (3 regions), `florida-zips.geojson` (ZIP polygons, 678KB)
 
 - **Component**: `components/dashboard/florida-regional-sales-map.tsx`
@@ -348,6 +362,9 @@ Every push to `main` will trigger a Netlify deploy.
 |  | `list_incoming_stock_by_collection` | `from`, `to` | Incoming stock table. |
 | Geographic Sales Analysis (`lib/mbic-supabase.ts`) | `sales_by_zip_fl` | `from_date`, `to_date`, `p_category`, `p_collection` | Aggregates sales by Florida ZIP code for choropleth map. |
 |  | `dealers_by_zip` | `p_zip_code`, `from_date`, `to_date` | Dealer-level drill-down for specific ZIP with city names and rep assignments. |
+|  | `get_zip_gap_analysis` | `from_date`, `to_date` | Returns ZIPs with competitor presence but zero sales for gap visualization. |
+|  | `get_zip_opportunity_details` | `p_zip_code` | Returns competitor store details for gap drawer (store name, type, city, revenue). |
+|  | Table: `competitors_market_data` | server insert | Stores competitor locations and revenue estimates from OpenStreetMap. Populated via Edge Function `sync-market-data`. |
 | Forms & Catalog (`lib/forms/catalog.ts`) | `get_colors_by_collection_v2` | `p_collection` | Color catalog for `/forms` (also exposed via `/api/forms/catalog/colors`). |
 |  | Tables: `sales_reps_demo`, `customers_demo`, `product_categories`, `product_category_collection_map` | server selects | Populate dependent dropdowns (rep → dealer → category → collection) in public forms. |
 |  | `loss_opportunities` | insert/select | POST `/api/forms/loss-opportunity` stores submissions then triggers n8n webhook. |
