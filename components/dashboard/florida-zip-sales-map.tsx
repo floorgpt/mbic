@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ZipSalesRow, DealerByZipRow } from "@/lib/mbic-supabase";
+import type { ZipSalesRow, DealerByZipRow, ZipGapRow } from "@/lib/mbic-supabase";
+import { getZipGapAnalysisSafe } from "@/lib/mbic-supabase";
 import { fmtUSD0 } from "@/lib/format";
-import { ArrowRight, ChevronLeft, ChevronRight, Layers, Circle } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Layers, Circle, AlertTriangle } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import {
@@ -15,6 +16,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { ZipGapDrawer } from "@/components/dashboard/zip-gap-drawer";
 
 // Dynamically import Leaflet components to avoid SSR issues
 const MapContainer = dynamic(
@@ -62,6 +64,12 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
   const [showPolygons, setShowPolygons] = useState(true);
   const [showCircles, setShowCircles] = useState(true);
 
+  // Gap Analysis state
+  const [gapData, setGapData] = useState<ZipGapRow[]>([]);
+  const [showGapCircles, setShowGapCircles] = useState(true);
+  const [gapDrawerOpen, setGapDrawerOpen] = useState(false);
+  const [selectedGapZip, setSelectedGapZip] = useState<string | null>(null);
+
   useEffect(() => {
     setIsMounted(true);
 
@@ -83,7 +91,26 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
       .catch((err) => {
         console.error("[FloridaZipSalesMap] Failed to load GeoJSON:", err);
       });
-  }, []);
+
+    // Load Gap Analysis data
+    const loadGapData = async () => {
+      try {
+        const result = await getZipGapAnalysisSafe(dateRange.from, dateRange.to);
+        if (!result._meta.error) {
+          setGapData(result.data);
+          console.log("[FloridaZipSalesMap] Gap data loaded:", {
+            gapCount: result.data.length,
+          });
+        } else {
+          console.error("[FloridaZipSalesMap] Gap data error:", result._meta.error);
+        }
+      } catch (err) {
+        console.error("[FloridaZipSalesMap] Failed to load gap data:", err);
+      }
+    };
+
+    loadGapData();
+  }, [dateRange.from, dateRange.to]);
 
   const handleViewDetails = async (zipCode: string) => {
     setSelectedZip(zipCode);
@@ -103,6 +130,11 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGapClick = (zipCode: string) => {
+    setSelectedGapZip(zipCode);
+    setGapDrawerOpen(true);
   };
 
   const handleDealerNavigation = (dealerId: number, repName: string) => {
@@ -270,6 +302,18 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
     return minRadius + ratio * (maxRadius - minRadius);
   };
 
+  // Gap circle radius calculation (based on estimated revenue)
+  const getGapCircleRadius = (estRevenue: number): number => {
+    if (estRevenue === 0) return 0;
+    const gapRevenues = gapData.map((g) => g.total_est_revenue);
+    const maxGapRevenue = Math.max(...gapRevenues, 1);
+    const minGapRevenue = Math.min(...gapRevenues, 0);
+    const minRadius = 5;
+    const maxRadius = 20;
+    const ratio = (estRevenue - minGapRevenue) / (maxGapRevenue - minGapRevenue);
+    return minRadius + ratio * (maxRadius - minRadius);
+  };
+
   return (
     <>
       <div className="h-[600px] w-full relative">
@@ -291,7 +335,16 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
             className="shadow-lg"
           >
             <Circle className="h-4 w-4 mr-2" />
-            Circles
+            Sales
+          </Button>
+          <Button
+            variant={showGapCircles ? "destructive" : "outline"}
+            size="sm"
+            onClick={() => setShowGapCircles(!showGapCircles)}
+            className="shadow-lg"
+          >
+            <AlertTriangle className="h-4 w-4 mr-2" />
+            Gaps
           </Button>
         </div>
 
@@ -381,6 +434,81 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
                         <circle cx="12" cy="12" r="3" />
                       </svg>
                       Click to view dealers
+                    </div>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
+
+          {/* Red Gap Circles (ZIPs with competitors but no sales) */}
+          {showGapCircles && gapData.map((gapZip) => {
+            const centroid = zipCentroids.get(gapZip.zip_code);
+            if (!centroid) return null;
+
+            return (
+              <CircleMarker
+                key={`gap-${gapZip.zip_code}`}
+                center={[centroid.lat, centroid.lng]}
+                radius={getGapCircleRadius(gapZip.total_est_revenue)}
+                pathOptions={{
+                  fillColor: "#ef4444", // red-500
+                  fillOpacity: 0.6,
+                  color: "#b91c1c", // red-700
+                  weight: 2,
+                }}
+                eventHandlers={{
+                  click: () => handleGapClick(gapZip.zip_code),
+                  mouseover: (e) => {
+                    e.target.setStyle({
+                      fillOpacity: 0.8,
+                      weight: 3,
+                    });
+                  },
+                  mouseout: (e) => {
+                    e.target.setStyle({
+                      fillOpacity: 0.6,
+                      weight: 2,
+                    });
+                  },
+                }}
+              >
+                <Tooltip
+                  sticky
+                  className="regional-tooltip"
+                  interactive={false}
+                >
+                  <div style={{ fontFamily: "sans-serif", minWidth: "200px", padding: "8px" }}>
+                    <p style={{ fontWeight: 600, marginBottom: "8px", fontSize: "14px", color: "#dc2626" }}>
+                      ⚠️ Gap ZIP: {gapZip.zip_code}
+                    </p>
+                    <p style={{ margin: "4px 0", fontSize: "12px" }}>
+                      <span style={{ color: "#6b7280" }}>Est. Market:</span>{" "}
+                      <strong style={{ color: "#dc2626" }}>{fmtUSD0(gapZip.total_est_revenue)}</strong>
+                    </p>
+                    <p style={{ margin: "4px 0", fontSize: "12px" }}>
+                      <span style={{ color: "#6b7280" }}>Competitors:</span>{" "}
+                      <strong>{gapZip.competitor_count}</strong>
+                    </p>
+                    <p style={{ margin: "4px 0", fontSize: "12px", color: "#dc2626" }}>
+                      <span style={{ fontWeight: 600 }}>Our Sales: $0</span>
+                    </p>
+                    <div style={{
+                      marginTop: "8px",
+                      paddingTop: "8px",
+                      borderTop: "1px solid #fee2e2",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      color: "#dc2626",
+                      fontSize: "11px",
+                      fontWeight: 600
+                    }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      Click to view gap details
                     </div>
                   </div>
                 </Tooltip>
@@ -532,6 +660,17 @@ export function FloridaZipSalesMap({ data, dateRange }: FloridaZipSalesMapProps)
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Gap Analysis Drawer */}
+      <ZipGapDrawer
+        isOpen={gapDrawerOpen}
+        onClose={() => {
+          setGapDrawerOpen(false);
+          setSelectedGapZip(null);
+        }}
+        zipCode={selectedGapZip}
+        dateRange={dateRange}
+      />
     </>
   );
 }

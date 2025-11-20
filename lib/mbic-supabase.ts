@@ -800,3 +800,96 @@ export async function getDealersByZipFlSafe(
     _meta: { ...safe._meta, count: mapped.length },
   };
 }
+
+// ============================================================================
+// Gap Analysis Types & Functions
+// ============================================================================
+
+/**
+ * Represents a ZIP code with gap opportunity (competitors present, our sales = $0)
+ * Used for rendering red circles on the Florida ZIP map
+ */
+export type ZipGapRow = {
+  zip_code: string;
+  total_est_revenue: number;
+  competitor_count: number;
+};
+
+/**
+ * Represents a competitor store with location and revenue data
+ * Used in the Gap Drawer to show detailed competitor information
+ */
+export type CompetitorRow = {
+  store_name: string;
+  store_type: string;
+  city: string;
+  est_annual_revenue: number;
+  latitude: number;
+  longitude: number;
+};
+
+/**
+ * Fetches ZIP codes where we have no sales but competitors have presence
+ * Returns aggregate data: total estimated revenue and competitor count per ZIP
+ *
+ * @param from - Start date (YYYY-MM-DD)
+ * @param to - End date (YYYY-MM-DD)
+ * @returns SafeResult with array of gap ZIP codes, sorted by revenue DESC
+ */
+export async function getZipGapAnalysisSafe(
+  from: DateISO,
+  to: DateISO,
+): Promise<SafeResult<ZipGapRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("get_zip_gap_analysis", {
+      from_date: from,
+      to_date: to,
+    }),
+    "get_zip_gap_analysis",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => ({
+    zip_code: typeof row.zip_code === "string" ? row.zip_code : "",
+    total_est_revenue: asNumber(row.total_est_revenue, 0),
+    competitor_count: asNumber(row.competitor_count, 0),
+  }));
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}
+
+/**
+ * Fetches detailed competitor data for a specific ZIP code
+ * Returns list of competitor stores with revenue estimates
+ *
+ * @param zipCode - 5-digit ZIP code
+ * @returns SafeResult with array of competitors, sorted by revenue DESC
+ */
+export async function getZipOpportunityDetailsSafe(
+  zipCode: string,
+): Promise<SafeResult<CompetitorRow[]>> {
+  const safe = await tryServerSafe(
+    callRpc<Array<Record<string, NumericLike | string>>>("get_zip_opportunity_details", {
+      p_zip_code: zipCode,
+    }),
+    "get_zip_opportunity_details",
+    [],
+  );
+
+  const mapped = (safe.data ?? []).map((row) => ({
+    store_name: typeof row.store_name === "string" ? row.store_name : "Unknown",
+    store_type: typeof row.store_type === "string" ? row.store_type : "Big Box",
+    city: typeof row.city === "string" ? row.city : "Unknown",
+    est_annual_revenue: asNumber(row.est_annual_revenue, 0),
+    latitude: asNumber(row.latitude, 0),
+    longitude: asNumber(row.longitude, 0),
+  }));
+
+  return {
+    data: mapped,
+    _meta: { ...safe._meta, count: mapped.length },
+  };
+}
